@@ -1,4 +1,5 @@
-// Package jdk finds the JDK that runs jdtls, which needs Java 21 or newer.
+// Package jdk finds the JDKs on the machine: the one that runs jdtls, and
+// the ones a project may be written for, which are not the same.
 package jdk
 
 import (
@@ -9,12 +10,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
 
-// MinMajor is the oldest Java that runs the jdtls we ship.
-const MinMajor = 21
+// MinMajor is the oldest Java that runs the jdtls we ship: its bundles
+// require JavaSE-25 (jdtls 1.63.0). What the editor understands of a
+// project is not bound by it: jdtls compiles Java 8 to 25 code, against
+// the runtime of the project's own level (see Installed).
+const MinMajor = 25
 
 // JDK is an installation, with the version its release file names.
 type JDK struct {
@@ -34,6 +39,9 @@ type Finder struct {
 	JavaHome func(ctx context.Context, args ...string) (string, error)
 	// LookPath resolves java on PATH.
 	LookPath func(string) (string, error)
+	// Roots are folders of installed JDKs, each a JDK's home or holding
+	// them as macOS's JavaVirtualMachines, whose homes are in Contents/Home.
+	Roots []string
 }
 
 // System is the Finder of this machine.
@@ -44,6 +52,15 @@ var System = Finder{
 		return strings.TrimSpace(string(out)), err
 	},
 	LookPath: exec.LookPath,
+	Roots:    systemRoots(),
+}
+
+func systemRoots() []string {
+	roots := []string{"/Library/Java/JavaVirtualMachines", "/usr/lib/jvm"}
+	if home, err := os.UserHomeDir(); err == nil {
+		roots = append(roots, filepath.Join(home, "Library/Java/JavaVirtualMachines"), filepath.Join(home, ".sdkman/candidates/java"))
+	}
+	return roots
 }
 
 // Find returns the first JDK of Java 21+, looking at JAVA_HOME, then at
@@ -126,4 +143,60 @@ func Major(version string) (int, error) {
 		return 0, fmt.Errorf("bad Java version %q", version)
 	}
 	return n, nil
+}
+
+// RuntimeName is how Eclipse names the runtime of a Java version, which
+// jdtls matches to a project's compiler level: "JavaSE-21", "JavaSE-1.8".
+func RuntimeName(major int) string {
+	if major <= 8 {
+		return "JavaSE-1.8"
+	}
+	return "JavaSE-" + strconv.Itoa(major)
+}
+
+// Installed lists the JDKs of the machine, one per Java version, the
+// newest build of each, oldest version first: JAVA_HOME's counts too. A
+// project written for Java 21 is then analysed against a JDK 21 whatever
+// JDK jdtls itself runs on.
+func (f Finder) Installed() []JDK {
+	var homes []string
+	if h := f.Getenv("JAVA_HOME"); h != "" {
+		homes = append(homes, h)
+	}
+	for _, root := range f.Roots {
+		entries, _ := os.ReadDir(root)
+		for _, e := range entries {
+			base := filepath.Join(root, e.Name())
+			homes = append(homes, filepath.Join(base, "Contents", "Home"), base)
+		}
+	}
+	best := map[int]JDK{}
+	for _, h := range homes {
+		j, err := Read(h)
+		if err != nil {
+			continue
+		}
+		if old, ok := best[j.Major]; !ok || newer(j.Version, old.Version) {
+			best[j.Major] = j
+		}
+	}
+	out := make([]JDK, 0, len(best))
+	for _, j := range best {
+		out = append(out, j)
+	}
+	slices.SortFunc(out, func(a, b JDK) int { return a.Major - b.Major })
+	return out
+}
+
+// newer compares dotted versions number by number: "21.0.13" > "21.0.9".
+func newer(a, b string) bool {
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		x, _ := strconv.Atoi(as[i])
+		y, _ := strconv.Atoi(bs[i])
+		if x != y {
+			return x > y
+		}
+	}
+	return len(as) > len(bs)
 }

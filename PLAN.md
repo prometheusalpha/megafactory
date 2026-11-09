@@ -7,7 +7,7 @@ Java IDE native viết bằng Go trên MyGo (`github.com/egoist/mygo` v0.8.3, na
 | # | Vấn đề | Quyết định |
 |---|---|---|
 | 1 | Platform | macOS trước; Linux/Windows sau |
-| 2 | jdtls + java-debug | App tự tải về app data dir ở lần chạy đầu (cần JDK 21+ để chạy jdtls) |
+| 2 | jdtls + java-debug | App tự tải về app data dir ở lần chạy đầu (jdtls 1.63.0 cần JDK 25 để chạy; code của project vẫn phân tích theo level của nó, vd 21, qua `java.configuration.runtimes`) |
 | 3 | Git | Gọi `git` CLI (blame/diff/checkout khớp hành vi git thật, không thêm dependency) |
 | 4 | Blame lề trái | Bản đầu tắt soft wrap khi bật cột blame |
 | 5 | XML | Chỉ highlight, không LemMinX |
@@ -55,8 +55,8 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 ## Phase 2 — jdtls
 
 - [x] 2.1 `internal/setup`: tải jdtls + java-debug jar về app data dir, verify checksum, hiện tiến độ (jdtls 1.63.0 milestone, java-debug 0.53.2 từ Open VSX; tự tải lần đầu mở project Java)
-- [x] 2.2 `internal/jdk`: tìm JDK 21+ (`JAVA_HOME` → `/usr/libexec/java_home` → `java` trên PATH, đọc version từ file `release`), báo lỗi rõ nếu thiếu hoặc quá cũ
-- [ ] 2.3 LSP client: spawn jdtls, workspace data dir riêng theo project, `initialize` (bundles = java-debug)
+- [x] 2.2 `internal/jdk`: tìm JDK 25+ để chạy jdtls (`JAVA_HOME` → `/usr/libexec/java_home` → `java` trên PATH, đọc `release`), báo lỗi rõ nếu thiếu/cũ; `Installed()` liệt kê mọi JDK (8…25) làm runtimes cho project (JDK 21 → `JavaSE-21`)
+- [x] 2.3 `internal/lsp` (JSON-RPC stdio) + `internal/jdtls`: spawn jdtls, workspace data dir riêng theo project, `initialize` (bundles = java-debug, runtimes). Đã chạy jdtls thật: code Java 21 sạch lỗi, tính năng Java 25 báo lỗi ở project level 21
 - [ ] 2.4 Sync document: `didOpen` / `didChange` (incremental) / `didSave` / `didClose`
 - [ ] 2.5 Diagnostics → `SetDiagnostics` (gạch sóng + hover + mark scrollbar)
 - [ ] 2.6 Toggle inline error: message cuối dòng qua `SetInlays`

@@ -48,15 +48,15 @@ func TestMajor(t *testing.T) {
 }
 
 func TestFindPrefersJavaHome(t *testing.T) {
-	a, b := fakeJDK(t, "21.0.1"), fakeJDK(t, "23")
+	a, b := fakeJDK(t, "25.0.1"), fakeJDK(t, "27")
 	j, err := finder(map[string]string{"JAVA_HOME": a}, b, "").Find(context.Background())
-	if err != nil || j.Home != a || j.Major != 21 || j.Java() != filepath.Join(a, "bin", "java") {
+	if err != nil || j.Home != a || j.Major != 25 || j.Java() != filepath.Join(a, "bin", "java") {
 		t.Errorf("%+v, %v", j, err)
 	}
 }
 
 func TestFindSkipsOldJavaHome(t *testing.T) {
-	old, ok := fakeJDK(t, "17.0.9"), fakeJDK(t, "21.0.2")
+	old, ok := fakeJDK(t, "17.0.9"), fakeJDK(t, "25.0.2")
 	j, err := finder(map[string]string{"JAVA_HOME": old}, ok, "").Find(context.Background())
 	if err != nil || j.Home != ok {
 		t.Errorf("%+v, %v", j, err)
@@ -64,7 +64,7 @@ func TestFindSkipsOldJavaHome(t *testing.T) {
 }
 
 func TestFindFollowsPathLink(t *testing.T) {
-	home := fakeJDK(t, "21.0.2")
+	home := fakeJDK(t, "25.0.2")
 	link := filepath.Join(t.TempDir(), "java")
 	os.Symlink(filepath.Join(home, "bin", "java"), link)
 	j, err := finder(nil, "", link).Find(context.Background())
@@ -102,5 +102,40 @@ func TestSystemFindsThisMachinesJDK(t *testing.T) {
 		t.Skip(err)
 	} else if j.Major < MinMajor {
 		t.Errorf("%+v", j)
+	}
+}
+
+func TestInstalledKeepsNewestPerVersion(t *testing.T) {
+	root := t.TempDir()
+	// macOS lays a JDK out under Contents/Home; others as the home itself.
+	mac := func(name, version string) {
+		h := filepath.Join(root, name, "Contents", "Home")
+		os.MkdirAll(h, 0o755)
+		os.WriteFile(filepath.Join(h, "release"), []byte("JAVA_VERSION=\""+version+"\"\n"), 0o644)
+	}
+	mac("a", "21.0.9")
+	mac("b", "21.0.13")
+	mac("c", "17.0.1")
+	flat := filepath.Join(root, "d")
+	os.MkdirAll(flat, 0o755)
+	os.WriteFile(filepath.Join(flat, "release"), []byte("JAVA_VERSION=\"25.0.5\"\n"), 0o644)
+	os.MkdirAll(filepath.Join(root, "not-a-jdk"), 0o755)
+
+	f := finder(nil, "", "")
+	f.Roots = []string{root, filepath.Join(root, "missing")}
+	var got []string
+	for _, j := range f.Installed() {
+		got = append(got, j.Version)
+	}
+	if want := "17.0.1 21.0.13 25.0.5"; strings.Join(got, " ") != want {
+		t.Errorf("installed %v, want %s", got, want)
+	}
+}
+
+func TestRuntimeName(t *testing.T) {
+	for n, want := range map[int]string{8: "JavaSE-1.8", 11: "JavaSE-11", 21: "JavaSE-21"} {
+		if got := RuntimeName(n); got != want {
+			t.Errorf("RuntimeName(%d) = %s, want %s", n, got, want)
+		}
 	}
 }
