@@ -41,7 +41,7 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 
 ## Phase 1 — Khung app + Explorer
 
-- [ ] 1.1 Layout 3 vùng bằng `ui.Split`: sidebar, editor area, bottom panel (ẩn/hiện được)
+- [x] 1.1 Layout 3 vùng: sidebar, editor area, bottom panel (ẩn/hiện được) — card + divider tự vẽ kiểu IntelliJ islands, không dùng `ui.Split`
 - [x] 1.2 Mở folder (dialog), lưu state window
 - [x] 1.3 File tree bằng `ui.TreeBase`, lazy-load thư mục, file bị git ignore (và `.git`) hiện nhạt
 - [x] 1.4 Fs watch: tree tự cập nhật khi file đổi ngoài app (`mygo.WatchFiles` hints, bỏ qua `.git`)
@@ -50,7 +50,7 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 - [x] 1.7 Context menu tab: Close, Close Others, Close to the Right, Close All, Copy Path, Reveal in Tree
 - [x] 1.8 Highlight Java/XML/JSON/Markdown bằng `editor.LanguageFor`; tokenizer cho `.properties` (key, `=`/`:`, escape, dòng nối `\`, `${placeholder}` của Spring)
 - [x] 1.9 Recent projects: lưu danh sách, palette Cmd+Shift+O, chọn → thay project trong window hiện tại (đóng tab, hỏi lưu file dirty)
-- [ ] 1.10 Test bằng `ui.NewTester` cho tree ops + tabs
+- [x] 1.10 Test bằng `ui.NewTester` cho tree ops + tabs
 
 ## Phase 2 — jdtls
 

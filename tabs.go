@@ -90,16 +90,6 @@ func (a *app) closeTabOf(t *tab) {
 	}
 }
 
-func (a *app) modifiedTabs() []*tab {
-	var mod []*tab
-	for _, t := range a.tabs {
-		if t.ed != nil && t.ed.Buffer.Modified() {
-			mod = append(mod, t)
-		}
-	}
-	return mod
-}
-
 // closeTabs closes several tabs, asking once to save those modified.
 func (a *app) closeTabs(ts []*tab) {
 	closeAll := func() {
