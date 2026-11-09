@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -38,6 +39,11 @@ const settingsPath = "megafactory:settings"
 type host struct {
 	// run does job's I/O off the UI thread, then what it returns on it.
 	run func(job func() (apply func()))
+	// update runs fn on the UI thread, from a job's goroutine, as for
+	// its progress.
+	update func(fn func())
+	// after runs fn on the UI thread once d has passed.
+	after func(d time.Duration, fn func())
 	// pickFolder asks the user for a folder and calls done with it on the
 	// UI thread, unless they cancel.
 	pickFolder    func(done func(path string))
@@ -103,6 +109,8 @@ type app struct {
 
 	recent  []string // the projects opened last, the most recent first
 	palette *recentPalette
+
+	servers servers
 }
 
 // newApp opens no project: main opens the one of st once the window is
@@ -111,6 +119,8 @@ func newApp(st windowState) *app {
 	return &app{
 		host: host{
 			run:           func(job func() func()) { job()() },
+			update:        func(fn func()) { fn() },
+			after:         func(time.Duration, func()) {},
 			pickFolder:    func(func(string)) {},
 			setAppearance: func(string) {},
 			watch:         func(string, func([]string)) func() { return func() {} },
@@ -601,7 +611,7 @@ func (a *app) statusBar(c *ui.Context, k *colors) {
 		faint := func(s string) { ui.Text(c, s).FontSize(11.5).TextColor(k.textFaint).SingleLine() }
 		if a.root != nil {
 			faint(a.branch)
-			faint("jdtls: not started")
+			a.serversStatus(c, k)
 		}
 		ui.Spacer(c)
 		if len(a.tabs) > 0 && a.tabs[a.active].ed != nil {

@@ -54,6 +54,9 @@ func (a *app) loadDir(n *node) {
 				return
 			}
 			n.merge(entries)
+			if n == tree && javaProject(entries) {
+				a.ensureServers()
+			}
 		}
 	})
 }

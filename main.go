@@ -5,8 +5,12 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path"
+	"time"
+
+	"megafactory/internal/setup"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -22,6 +26,7 @@ func main() {
 	st := loadState()
 	a := newApp(st)
 	a.recent = loadRecent()
+	a.servers = servers{artifacts: setup.Artifacts, client: http.DefaultClient}
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "megafactory",
@@ -83,6 +88,10 @@ func windowHost(win *mygo.Window) host {
 	return host{
 		run: func(job func() func()) {
 			go func() { win.Update(job()) }()
+		},
+		update: win.Update,
+		after: func(d time.Duration, fn func()) {
+			time.AfterFunc(d, func() { win.Update(fn) })
 		},
 		pickFolder: func(done func(string)) {
 			// Dialog.Open waits for the user, so not on the UI thread.

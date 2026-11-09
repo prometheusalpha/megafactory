@@ -54,7 +54,7 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 
 ## Phase 2 — jdtls
 
-- [ ] 2.1 `internal/setup`: tải jdtls + java-debug jar về app data dir, verify checksum, hiện tiến độ
+- [x] 2.1 `internal/setup`: tải jdtls + java-debug jar về app data dir, verify checksum, hiện tiến độ (jdtls 1.63.0 milestone, java-debug 0.53.2 từ Open VSX; tự tải lần đầu mở project Java)
 - [ ] 2.2 Kiểm tra JDK 21+ (`JAVA_HOME` / `/usr/libexec/java_home`), báo lỗi rõ nếu thiếu
 - [ ] 2.3 LSP client: spawn jdtls, workspace data dir riêng theo project, `initialize` (bundles = java-debug)
 - [ ] 2.4 Sync document: `didOpen` / `didChange` (incremental) / `didSave` / `didClose`
