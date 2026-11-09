@@ -150,3 +150,31 @@ func TestZipEntry(t *testing.T) {
 		t.Error("found a missing entry")
 	}
 }
+
+func TestUntarStripDropsTopFolder(t *testing.T) {
+	body := tarGz(t, map[string]string{"jdk-25/bin/java": "x", "jdk-25/release": "JAVA_VERSION=\"25\""})
+	srv, _ := serve(t, body)
+	a := Artifact{Name: "jdk", Version: "25", URL: srv.URL + "/a", SHA256: sum(body), unpack: untarStrip(1)}
+	root := t.TempDir()
+	dir, err := Ensure(context.Background(), srv.Client(), root, a, func(Progress) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"release", "bin/java"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+}
+
+func TestJDKPinnedPerSystem(t *testing.T) {
+	for _, sys := range [][2]string{{"darwin", "arm64"}, {"darwin", "amd64"}, {"linux", "arm64"}, {"linux", "amd64"}} {
+		a, ok := JDK(sys[0], sys[1])
+		if !ok || len(a.SHA256) != 64 || !strings.Contains(a.URL, "25.0.5_8.tar.gz") {
+			t.Errorf("%v: %+v, %v", sys, a, ok)
+		}
+	}
+	if _, ok := JDK("windows", "amd64"); ok {
+		t.Error("windows has no pinned JDK yet")
+	}
+}

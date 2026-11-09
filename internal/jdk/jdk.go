@@ -63,8 +63,9 @@ func systemRoots() []string {
 	return roots
 }
 
-// Find returns the first JDK of Java 21+, looking at JAVA_HOME, then at
-// the newest one macOS knows, then at java on PATH. The error names what
+// Find returns the first JDK of Java 25+, looking at JAVA_HOME, then at
+// the newest one macOS knows, then at java on PATH, then at the ones in
+// Roots, the app's own among them. The error names what
 // was found too old, or says none was found, with what to do.
 func (f Finder) Find(ctx context.Context) (JDK, error) {
 	var tooOld []JDK
@@ -100,6 +101,9 @@ func (f Finder) candidates(ctx context.Context) []string {
 		if real, err := filepath.EvalSymlinks(p); err == nil {
 			homes = append(homes, filepath.Dir(filepath.Dir(real)))
 		}
+	}
+	for _, j := range slices.Backward(f.Installed()) {
+		homes = append(homes, j.Home)
 	}
 	return homes
 }

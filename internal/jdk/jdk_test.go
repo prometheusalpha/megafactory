@@ -139,3 +139,17 @@ func TestRuntimeName(t *testing.T) {
 		}
 	}
 }
+
+func TestFindUsesRoots(t *testing.T) {
+	root := t.TempDir()
+	// What the app installs: the JDK's home, in a folder of its own.
+	h := filepath.Join(root, "jdk-25.0.5", "Contents", "Home")
+	os.MkdirAll(h, 0o755)
+	os.WriteFile(filepath.Join(h, "release"), []byte("JAVA_VERSION=\"25.0.5\"\n"), 0o644)
+	f := finder(nil, "", "")
+	f.Roots = []string{root}
+	j, err := f.Find(context.Background())
+	if err != nil || j.Home != h {
+		t.Errorf("%+v, %v", j, err)
+	}
+}

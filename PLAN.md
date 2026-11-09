@@ -56,6 +56,7 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 
 - [x] 2.1 `internal/setup`: tải jdtls + java-debug jar về app data dir, verify checksum, hiện tiến độ (jdtls 1.63.0 milestone, java-debug 0.53.2 từ Open VSX; tự tải lần đầu mở project Java)
 - [x] 2.2 `internal/jdk`: tìm JDK 25+ để chạy jdtls (`JAVA_HOME` → `/usr/libexec/java_home` → `java` trên PATH, đọc `release`), báo lỗi rõ nếu thiếu/cũ; `Installed()` liệt kê mọi JDK (8…25) làm runtimes cho project (JDK 21 → `JavaSE-21`)
+- [x] 2.2b `setup.JDK`: Temurin 25 pin theo hệ (mac/linux, arm64/amd64), `Find` tìm cả trong `Roots` (thư mục servers của app). Chưa nối vào app: khi `Find` báo thiếu JDK 25 thì tải về `servers/` và thêm vào `Roots` — làm cùng 2.8
 - [x] 2.3 `internal/lsp` (JSON-RPC stdio) + `internal/jdtls`: spawn jdtls, workspace data dir riêng theo project, `initialize` (bundles = java-debug, runtimes). Đã chạy jdtls thật: code Java 21 sạch lỗi, tính năng Java 25 báo lỗi ở project level 21
 - [ ] 2.4 Sync document: `didOpen` / `didChange` (incremental) / `didSave` / `didClose`
 - [ ] 2.5 Diagnostics → `SetDiagnostics` (gạch sóng + hover + mark scrollbar)

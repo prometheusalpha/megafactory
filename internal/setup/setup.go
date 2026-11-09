@@ -64,6 +64,33 @@ var JavaDebug = Artifact{
 // JavaDebugJar is the plugin's file in JavaDebug's folder.
 const JavaDebugJar = "com.microsoft.java.debug.plugin-0.53.2.jar"
 
+// JDK is the Temurin 25 build jdtls runs on, for a system, or false where
+// none is pinned. It is installed only where no JDK 25 is: its tarball's
+// one top folder is dropped, so that Dir holds Contents/Home on macOS and
+// bin/ on Linux.
+func JDK(goos, goarch string) (Artifact, bool) {
+	const base = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_"
+	sums := map[string]string{
+		"darwin/arm64": "36dc14d797aaff6d89aab302cd053fdba6207dfdcf772052fa7b023a94b0e857",
+		"darwin/amd64": "32cd4d2151c91aa00d0fc911edfd05245ed40fa6b1aa894d5f35c928cd67a59d",
+		"linux/arm64":  "bb5b2ded252f21c6090cf780b0a408ad0d83bbb557e702955643557f13231880",
+		"linux/amd64":  "68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb",
+	}
+	sum, ok := sums[goos+"/"+goarch]
+	if !ok {
+		return Artifact{}, false
+	}
+	arch := map[string]string{"arm64": "aarch64", "amd64": "x64"}[goarch]
+	osName := map[string]string{"darwin": "mac", "linux": "linux"}[goos]
+	return Artifact{
+		Name:    "jdk",
+		Version: "25.0.5",
+		URL:     base + arch + "_" + osName + "_hotspot_25.0.5_8.tar.gz",
+		SHA256:  sum,
+		unpack:  untarStrip(1),
+	}, true
+}
+
 // Artifacts are what the IDE needs, in the order they download.
 var Artifacts = []Artifact{JDTLS, JavaDebug}
 
@@ -180,7 +207,16 @@ func inside(dir, name string) (string, error) {
 
 // untar unpacks a .tar.gz, with its files' permissions: jdtls's launcher
 // is executable.
-func untar(archive, dir string) error {
+func untar(archive, dir string) error { return untarStrip(0)(archive, dir) }
+
+// untarStrip is untar without the first n folders of every name, as tar's
+// --strip-components: an entry left with no name, the folder itself, is
+// skipped.
+func untarStrip(n int) func(archive, dir string) error {
+	return func(archive, dir string) error { return untarInto(archive, dir, n) }
+}
+
+func untarInto(archive, dir string, strip int) error {
 	f, err := os.Open(archive)
 	if err != nil {
 		return err
@@ -199,7 +235,15 @@ func untar(archive, dir string) error {
 		if err != nil {
 			return err
 		}
-		p, err := inside(dir, hdr.Name)
+		name := hdr.Name
+		if strip > 0 {
+			parts := strings.SplitN(path.Clean(filepath.ToSlash(name)), "/", strip+1)
+			if len(parts) <= strip {
+				continue
+			}
+			name = parts[strip]
+		}
+		p, err := inside(dir, name)
 		if err != nil {
 			return err
 		}
@@ -209,7 +253,7 @@ func untar(archive, dir string) error {
 		case tar.TypeReg:
 			err = writeFile(p, tr, hdr.FileInfo().Mode().Perm())
 		default:
-			// Links and devices: jdtls ships none.
+			// Links and devices: jdtls and the JDK's tarballs ship none.
 		}
 		if err != nil {
 			return err
