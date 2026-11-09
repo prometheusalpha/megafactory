@@ -10,9 +10,11 @@ import (
 	"path"
 	"time"
 
+	"megafactory/internal/runner"
 	"megafactory/internal/setup"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -45,6 +47,7 @@ func main() {
 			Content:              ui.View(a.view),
 		})
 		a.host = windowHost(win)
+		a.host.javaJDK = a.javaJDK
 		mygo.App.SetMenu(appMenu(a, win))
 		closing := false
 		win.OnClose(func(e *mygo.CloseEvent) {
@@ -134,6 +137,14 @@ func windowHost(win *mygo.Window) host {
 			go watchProject(ctx, win, root, changed)
 			return stop
 		},
+		newTerm: func(opts terminal.Options) (termHandle, error) {
+			t, err := terminal.New(opts)
+			if err != nil {
+				return nil, err
+			}
+			return liveTerm{t}, nil
+		},
+		startProc: runner.Start,
 	}
 }
 

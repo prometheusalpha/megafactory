@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -9,6 +10,13 @@ import (
 	"slices"
 	"time"
 
+	"megafactory/internal/javalang"
+	"megafactory/internal/jdk"
+	"megafactory/internal/runcfg"
+	"megafactory/internal/runner"
+	"megafactory/internal/setup"
+
+	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 )
@@ -63,6 +71,15 @@ type host struct {
 	showError func(title, message string)
 	// closeWindow closes the window as its close button does.
 	closeWindow func()
+	// newTerm makes a terminal running opts. It is here, not in the view,
+	// as terminal.New loads libghostty-vt, which no headless test has.
+	newTerm func(opts terminal.Options) (termHandle, error)
+	// startProc runs a run configuration's program. It is here so tests
+	// give lines without spawning a process.
+	startProc func(spec runner.Spec, onLine func(runner.Line), onExit func(error)) (*runner.Process, error)
+	// javaJDK finds or installs a JDK 25 for jdtls and for running Java.
+	// Tests use a finder that never downloads.
+	javaJDK func(ctx context.Context, progress func(setup.Progress)) (jdk.JDK, []jdk.JDK, error)
 }
 
 // question is a message the user answers with one of its buttons, the
@@ -107,8 +124,19 @@ type app struct {
 	bottomH    float32
 	bottomTab  int
 
-	runConfig  string
-	runConfigs []string
+	terms        []*termTab
+	activeTerm   int
+	termStarting bool
+	termErr      error
+
+	// runConfig is the id of the configuration the toolbar selected.
+	runConfig   string
+	runStore    *runcfg.Store
+	runEdit     *runEditState
+	runConsole  *runConsoleState
+	runProc     *runner.Process
+	runGen      int
+	mainClasses []javalang.MainClass
 
 	recent  []string // the projects opened last, the most recent first
 	palette *recentPalette
@@ -142,17 +170,29 @@ func newApp(st windowState) *app {
 			ask:           func(_ question, done func(int)) { done(0) },
 			closeWindow:   func() {},
 			showError:     func(title, msg string) { log.Printf("%s: %s", title, msg) },
+			newTerm:       func(terminal.Options) (termHandle, error) { return nil, errors.New("no terminal without the app") },
+			startProc:     runner.Start,
+			javaJDK: func(ctx context.Context, _ func(setup.Progress)) (jdk.JDK, []jdk.JDK, error) {
+				j, err := jdk.System.Find(ctx)
+				return j, nil, err
+			},
 		},
+		runStore:    mustEmptyStore(),
 		branch:      "main",
 		focus:       focusEditor,
 		showSidebar: st.ShowSidebar,
 		sidebarW:    st.SidebarW,
 		showBottom:  st.ShowBottom,
 		bottomH:     st.BottomH,
-		runConfig:   "DemoApplication",
-		runConfigs:  []string{"DemoApplication", "mvn clean install", "All tests"},
 		java:        newJavaService(),
 	}
+}
+
+// mustEmptyStore is the store of an app with no project yet. runcfg.Load
+// on a missing path is the only constructor, and that cannot fail here.
+func mustEmptyStore() *runcfg.Store {
+	s, _ := runcfg.Load("")
+	return s
 }
 
 const (
@@ -199,6 +239,7 @@ func (a *app) view(c *ui.Context) {
 	})
 	a.recentPaletteView(c, k)
 	a.branchPickerView(c, k)
+	a.runConfigsDialog(c, k)
 }
 
 // divider sits in the gap between two cards and resizes the one whose
@@ -258,8 +299,19 @@ func (a *app) titleBar(c *ui.Context, k *colors) {
 		ui.Spacer(c)
 		a.runConfigSelect(c, k)
 		ui.Row(c).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
-			iconButton(c, k, "play", "Run '"+a.runConfig+"'", 30, 16)
-			iconButton(c, k, "bug", "Debug '"+a.runConfig+"'", 30, 17)
+			if iconButton(c, k, "play", "Run", 30, 16).Clicked() {
+				a.runCurrent()
+			}
+			if iconButton(c, k, "x", "Stop", 30, 14).Clicked() {
+				a.stopRun()
+			}
+			if iconButton(c, k, "refresh-cw", "Rerun", 30, 16).Clicked() {
+				a.rerun()
+			}
+			if iconButton(c, k, "settings-2", "Edit Configurations", 30, 16).Clicked() {
+				a.editConfigurations()
+			}
+			iconButton(c, k, "bug", "Debug (Phase 5)", 30, 17)
 			sync := iconButton(c, k, "refresh-cw", "Sync Maven/Gradle", 30, 16)
 			if a.java.buildChanged {
 				sync.Background(k.selected)
@@ -296,30 +348,39 @@ func chip(c *ui.Context, k *colors, iconName, label string) ui.Element {
 // runConfigSelect chooses the run configuration, as a chip of the title
 // bar whose options drop in a panel.
 func (a *app) runConfigSelect(c *ui.Context, k *colors) {
+	prev := a.runConfig
 	sel := ui.SelectBase(c, &a.runConfig)
 	tr := sel.Trigger.Row().Height(28).MaxWidth(240).Padding(0, 8, 0, 12).Gap(7).AlignItems(ui.Center).Radius(14).Shrink(1).
 		Background(k.track).Border(0.5, k.trackBorder).Cursor(ui.CursorPointer).Label("Run Configuration")
 	if tr.Hovered() || sel.Open() {
 		tr.Background(k.hover)
 	}
+	name := "Run Configuration"
+	if cfg, ok := a.runStore.ByID(a.runConfig); ok {
+		name = cfg.Name
+	}
 	tr.Children(func() {
-		ui.Text(c, a.runConfig).FontSize(13).FontWeight(600).TextColor(k.text).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+		ui.Text(c, name).FontSize(13).FontWeight(600).TextColor(k.text).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
 		ui.Icon(c, icon("chevron-down")).Size(14, 14).TextColor(k.iconMuted)
 	})
 	sel.Popup(func(panel ui.Element) {
 		panel.Margin(6, 0, 0, 0).Padding(4).MinWidth(220).Radius(12).Background(k.panel).Border(1, k.panelBorder).
 			Shadow(0, 8, 24, 0, k.shadowFocused)
-		for _, cfg := range a.runConfigs {
-			item := sel.Item(cfg).Row().Height(28).Padding(0, 10).Gap(8).AlignItems(ui.Center).Radius(8)
+		for _, cfg := range a.runStore.All() {
+			item := sel.Item(cfg.ID).Row().Height(28).Padding(0, 10).Gap(8).AlignItems(ui.Center).Radius(8).Label(cfg.Name)
 			if item.Highlighted() {
 				item.Background(k.selected)
 			}
 			item.Children(func() {
 				ui.Icon(c, icon("play")).Size(13, 13).TextColor(k.iconMuted)
-				ui.Text(c, cfg).FontSize(13).TextColor(k.text).SingleLine()
+				ui.Text(c, cfg.Name).FontSize(13).TextColor(k.text).SingleLine()
 			})
 		}
 	})
+	if a.runConfig != prev {
+		a.runStore.Select(a.runConfig)
+		a.saveRunConfigs()
+	}
 }
 
 // focusable makes a card take the user's attention when pressed.
@@ -566,6 +627,7 @@ func (a *app) editorCard(c *ui.Context, k *colors) ui.Element {
 			cur.ed.OnHover = func(r editor.HoverRequest) { a.javaHover(cur, r) }
 			cur.ed.OnDefinition = func(offset int) { a.javaDefinition(cur, offset) }
 		}
+		a.wireRunGutter(c, cur.ed, cur)
 		// Each file keeps its own editor widget state (scroll, focus).
 		c.Key(cur.path)
 		if prefs.GutterBlame && a.git.ok {
@@ -662,11 +724,11 @@ func (a *app) bottomPanel(c *ui.Context, k *colors) ui.Element {
 		ui.Column(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 			switch a.bottomTab {
 			case 0:
-				placeholder(c, k, "Console output — Phase 4")
+				a.runConsolePage(c, k)
 			case 1:
 				placeholder(c, k, "Variables · Watches · Call stack — Phase 5")
 			case 2:
-				placeholder(c, k, "Terminal (libghostty) — Phase 4")
+				a.terminalPage(c, k)
 			case 3:
 				a.problemsPage(c, k)
 			case 4:

@@ -41,6 +41,8 @@ type langServer interface {
 	Hover(path string, offset int) (int, int, string, error)
 	Definition(path string, offset int) ([]javalang.Location, error)
 	BuildFilesChanged(paths ...string) error
+	ResolveMainClasses() ([]javalang.MainClass, error)
+	ResolveClasspath(mainClass, projectName string) (modules, classes []string, err error)
 }
 
 // javaStarter starts a project's language server: it is given where the

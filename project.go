@@ -20,7 +20,9 @@ func (a *app) openProject(dir string) {
 	// The old project's server closes before its tabs, whose paths need
 	// the old project to name.
 	a.stopJava()
+	a.closeTerms()
 	a.project = dir
+	a.loadRunConfigs()
 	a.builds = buildView{}
 	a.gitProjectOpened()
 	a.pendingLine = nil

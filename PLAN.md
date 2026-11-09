@@ -26,8 +26,9 @@ internal/workspace/   fs tree, file ops, fs watch
 internal/lsp/         JSON-RPC stdio client → jdtls
 internal/tabs/        documents: editor.Buffer + editor.State per file, dirty/save
 internal/git/         `git` CLI wrapper
-internal/runcfg/      run configurations (.megafactory/run.json)
-internal/runner/      process + console output
+internal/runcfg/     run configurations: model, .megafactory/run.json, argv
+internal/runner/      process lifetime, stdout/stderr lines, File.java:123 links
+internal/javalang/    LSP client → jdtls, resolveMainClass/resolveClasspath
 internal/dap/         DAP client → java-debug
 internal/build/       maven/gradle sync + goals/tasks
 internal/ai/          OpenAI-compatible client cho inline suggestion
@@ -81,16 +82,16 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 
 ## Phase 4 — Terminal + Run
 
-- [ ] 4.1 Terminal bằng `plugins/terminal` (libghostty-vt), cwd = root project
-- [ ] 4.2 Nhiều tab terminal, đóng/mở, rename
-- [ ] 4.3 Run configurations: model + lưu `.megafactory/run.json`
-- [ ] 4.4 Config type **Application**: main class, module, program args, VM options, env vars, working dir, JDK
-- [ ] 4.5 Config type **Spring Boot**: như Application + active profiles (`-Dspring.profiles.active`)
-- [ ] 4.6 Config type **Maven goal** / **Gradle task** / **Shell**
-- [ ] 4.7 Dialog Edit Configurations (thêm, sửa, xoá, nhân bản) + dropdown chọn config trên toolbar
-- [ ] 4.8 Resolve main class + classpath qua java-debug (`vscode.java.resolveMainClass`, `vscode.java.resolveClasspath`)
-- [ ] 4.9 Tự tạo config từ gutter/context menu "Run 'Main'" trên class có `main` hoặc `@SpringBootApplication`
-- [ ] 4.10 Runner: start/stop/rerun, console stdout/stderr có màu, link `File.java:123` trong stack trace mở file
+- [x] 4.1 Terminal bằng `plugins/terminal` (libghostty-vt), cwd = root project
+- [x] 4.2 Nhiều tab terminal, đóng/mở, rename
+- [x] 4.3 Run configurations: model + lưu `.megafactory/run.json`
+- [x] 4.4 Config type **Application**: main class, module, program args, VM options, env vars, working dir, JDK
+- [x] 4.5 Config type **Spring Boot**: như Application + active profiles (`-Dspring.profiles.active`)
+- [x] 4.6 Config type **Maven goal** / **Gradle task** / **Shell**
+- [x] 4.7 Dialog Edit Configurations (thêm, sửa, xoá, nhân bản) + dropdown chọn config trên toolbar
+- [x] 4.8 Resolve main class + classpath qua java-debug (`vscode.java.resolveMainClass`, `vscode.java.resolveClasspath`)
+- [x] 4.9 Tự tạo config từ gutter/context menu "Run 'Main'" trên class có `main` hoặc `@SpringBootApplication`
+- [x] 4.10 Runner: start/stop/rerun, console stdout/stderr có màu, link `File.java:123` trong stack trace mở file
 
 ## Phase 5 — Debug
 

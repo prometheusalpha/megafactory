@@ -21,11 +21,13 @@ type buildView struct {
 	tasks   []build.Task
 	loaded  bool
 	loading bool
+	// selectedTask is the one a click chooses, shown as a command line.
+	selectedTask string
 }
 
 // buildPage lists the project's build tasks: Maven's phases at once,
 // Gradle's from its wrapper once, and the command line a task would run.
-// Nothing runs here; the runner of Phase 4 does.
+// Nothing runs here; the toolbar's Run button runs a configuration.
 func (a *app) buildPage(c *ui.Context, k *colors) {
 	v := &a.builds
 	if v.root != a.project {
@@ -89,7 +91,7 @@ func (a *app) buildPage(c *ui.Context, k *colors) {
 
 // taskRow is one task, which a click chooses to run.
 func (a *app) taskRow(c *ui.Context, k *colors, task build.Task) {
-	on := a.runConfig == task.Name
+	on := a.builds.selectedTask == task.Name
 	row := ui.Row(c).Height(26).Gap(10).Padding(0, 8).AlignItems(ui.Center).Radius(8).
 		Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(task.Name)
 	if on {
@@ -102,7 +104,7 @@ func (a *app) taskRow(c *ui.Context, k *colors, task build.Task) {
 		ui.Text(c, task.Description).FontSize(11.5).TextColor(k.textFaint).SingleLine().Ellipsis("…")
 	})
 	row.OnClick(func() {
-		a.runConfig = task.Name
+		a.builds.selectedTask = task.Name
 	})
 }
 
@@ -136,16 +138,15 @@ func (a *app) loadBuild(v *buildView) {
 	})
 }
 
-// buildCommand is the command line of the task the run config names, when
-// it is one of the build's tasks.
+// buildCommand is the command line of the task the Build page selected.
 func (a *app) buildCommand(v *buildView) (string, error) {
-	if v.project.Kind == build.KindNone || a.runConfig == "" {
+	if v.project.Kind == build.KindNone || v.selectedTask == "" {
 		return "", nil
 	}
-	if !slices.ContainsFunc(v.tasks, func(t build.Task) bool { return t.Name == a.runConfig }) {
+	if !slices.ContainsFunc(v.tasks, func(t build.Task) bool { return t.Name == v.selectedTask }) {
 		return "", nil
 	}
-	cmd, err := v.project.Command(a.runConfig)
+	cmd, err := v.project.Command(v.selectedTask)
 	if err != nil {
 		return "", err
 	}

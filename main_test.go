@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"megafactory/internal/runcfg"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -122,9 +124,13 @@ func TestHideBottomPanel(t *testing.T) {
 
 func TestChooseRunConfig(t *testing.T) {
 	a, tt := openSample(t)
+	cfg, err := a.runStore.Upsert(runcfg.Config{Name: "All tests", Kind: runcfg.Maven, Goals: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	click(t, tt, "Run Configuration", "All tests")
-	if a.runConfig != "All tests" {
-		t.Errorf("run config %q", a.runConfig)
+	if a.runConfig != cfg.ID {
+		t.Errorf("run config %q, want %q", a.runConfig, cfg.ID)
 	}
 }
 

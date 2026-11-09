@@ -38,6 +38,11 @@ type fakeJava struct {
 	define   func(path string, offset int) ([]javalang.Location, error)
 	asked    string
 	at       int
+
+	mainClasses []javalang.MainClass
+	classPaths  [][]string
+	resolveErr  error
+	resolved    string
 }
 
 func newFakeJava() *fakeJava {
@@ -100,6 +105,25 @@ func (f *fakeJava) Definition(path string, offset int) ([]javalang.Location, err
 func (f *fakeJava) BuildFilesChanged(paths ...string) error {
 	f.build = append(f.build, slices.Clone(paths))
 	return nil
+}
+
+func (f *fakeJava) ResolveMainClasses() ([]javalang.MainClass, error) {
+	return f.mainClasses, f.resolveErr
+}
+
+func (f *fakeJava) ResolveClasspath(mainClass, projectName string) ([]string, []string, error) {
+	f.resolved = mainClass + "/" + projectName
+	if f.resolveErr != nil {
+		return nil, nil, f.resolveErr
+	}
+	var modules, classes []string
+	if len(f.classPaths) > 0 {
+		modules = f.classPaths[0]
+	}
+	if len(f.classPaths) > 1 {
+		classes = f.classPaths[1]
+	}
+	return modules, classes, nil
 }
 
 func (f *fakeJava) starter(project string, diag func(string, uint64, []javalang.Diagnostic), status func(javalang.Status, string)) (langServer, func(), error) {
@@ -303,8 +327,8 @@ func TestBuildPageTasks(t *testing.T) {
 	}
 	click(t, tt, "package")
 	tt.Frame()
-	if a.runConfig != "package" {
-		t.Errorf("run config %q", a.runConfig)
+	if a.builds.selectedTask != "package" {
+		t.Errorf("selected task %q", a.builds.selectedTask)
 	}
 	if !tt.HasText("mvnw package") {
 		t.Errorf("no command line: %v", tt.Texts())
