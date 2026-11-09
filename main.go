@@ -21,6 +21,7 @@ func main() {
 	mygo.Theme.SetSource(mygo.ThemeSource(prefs.Appearance))
 	st := loadState()
 	a := newApp(st)
+	a.recent = loadRecent()
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "megafactory",
@@ -65,6 +66,7 @@ func appMenu(a *app, win *mygo.Window) *mygo.Menu {
 		{Role: mygo.RoleAppMenu},
 		{Label: "File", Submenu: []*mygo.MenuItem{
 			{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: do(a.openFolder)},
+			{Label: "Recent Projects…", Accelerator: "CmdOrCtrl+Shift+O", Click: do(a.openRecentPalette)},
 			mygo.Separator(),
 			{Label: "Save", Accelerator: "CmdOrCtrl+S", Click: do(a.saveActive)},
 			mygo.Separator(),

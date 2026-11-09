@@ -7,11 +7,12 @@ import (
 	"slices"
 	"strings"
 
+	"megafactory/internal/recent"
 	"megafactory/internal/workspace"
 )
 
-// openProject replaces the open project with the folder at path. Its tabs
-// close: none can be saved yet (1.6), and 1.9 asks before dropping edits.
+// openProject replaces the open project with the folder at dir, and its
+// tabs with none: switchProject asked to save them.
 func (a *app) openProject(dir string) {
 	if a.stopWatch != nil {
 		a.stopWatch()
@@ -28,10 +29,11 @@ func (a *app) openProject(dir string) {
 	})
 	a.loadDir(a.root)
 	saveState(a.state())
+	a.setRecent(recent.Add(a.recent, dir))
 }
 
 func (a *app) openFolder() {
-	a.host.pickFolder(a.openProject)
+	a.host.pickFolder(a.switchProject)
 }
 
 // loadDir reads a folder's children, again when it changed on disk,

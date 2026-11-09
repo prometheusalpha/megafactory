@@ -100,6 +100,9 @@ type app struct {
 
 	runConfig  string
 	runConfigs []string
+
+	recent  []string // the projects opened last, the most recent first
+	palette *recentPalette
 }
 
 // newApp opens no project: main opens the one of st once the window is
@@ -141,6 +144,7 @@ func (a *app) view(c *ui.Context) {
 	c.OnShortcut(ui.Cmd, ui.KeyB, func() { a.showSidebar = !a.showSidebar })
 	c.OnShortcut(ui.Cmd, ui.KeyJ, func() { a.showBottom = !a.showBottom })
 	c.OnShortcut(ui.Cmd, ui.KeyO, a.openFolder)
+	c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyO, a.openRecentPalette)
 	c.OnShortcut(ui.Cmd, ui.KeyComma, a.openSettings)
 	// On macOS the File menu takes these first, and does the same.
 	c.OnShortcut(ui.Cmd, ui.KeyS, a.saveActive)
@@ -165,6 +169,7 @@ func (a *app) view(c *ui.Context) {
 		})
 		a.statusBar(c, k)
 	})
+	a.recentPaletteView(c, k)
 }
 
 // divider sits in the gap between two cards and resizes the one whose
@@ -211,13 +216,12 @@ func (a *app) titleBar(c *ui.Context, k *colors) {
 		if iconButton(c, k, "panel-left", "Toggle Sidebar  ⌘B", 30, 17).Clicked() {
 			a.showSidebar = !a.showSidebar
 		}
-		// Until Recent Projects (1.9), the project's chip opens a folder.
 		label := "Open Folder…"
 		if a.root != nil {
 			label = a.root.name
 		}
-		if chip(c, k, "folder-open", label).Tooltip("Open Folder  ⌘O").Clicked() {
-			a.openFolder()
+		if chip(c, k, "folder-open", label).Tooltip("Recent Projects  ⌘⇧O").Clicked() {
+			a.openRecentPalette()
 		}
 		if a.root != nil {
 			chip(c, k, "git-branch", a.branch).Tooltip("Branches")

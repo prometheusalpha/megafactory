@@ -81,7 +81,7 @@ func TestOpenFolderReplacesProject(t *testing.T) {
 	}
 	dir := sampleProject(t)
 	a.host.pickFolder = func(done func(string)) { done(dir) }
-	click(t, tt, "Open Folder…")
+	tt.Key(ui.Cmd, ui.KeyO)
 	if a.project != dir || !tt.HasText("pom.xml") {
 		t.Fatalf("project %q", a.project)
 	}
