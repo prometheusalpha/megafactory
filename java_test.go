@@ -270,22 +270,22 @@ func TestInlineErrorsSetting(t *testing.T) {
 	start := snap.LineStart(4)
 	f.diag(file, snap.Version(), []javalang.Diagnostic{{Start: start, End: start + 1, Severity: 1, Message: "Unused import\nmore"}})
 	tt.Frame()
-	if n := a.java.inlays[demoRel]; n != 1 {
+	if n := len(a.java.inlays[demoRel]); n != 1 {
 		t.Fatalf("inlays %d, want 1", n)
 	}
 	// The panel takes the room the Java section would need.
 	click(t, tt, "Hide Panel  ⌘J", "Settings  ⌘,", "Show problems inline")
 	tt.Frame()
-	if prefs.InlineErrors || a.java.inlays[demoRel] != 0 {
-		t.Errorf("setting %v, inlays %d", prefs.InlineErrors, a.java.inlays[demoRel])
+	if prefs.InlineErrors || len(a.java.inlays[demoRel]) != 0 {
+		t.Errorf("setting %v, inlays %d", prefs.InlineErrors, len(a.java.inlays[demoRel]))
 	}
 	if loadSettings().InlineErrors {
 		t.Error("the setting was not kept")
 	}
 	click(t, tt, "Show problems inline")
 	tt.Frame()
-	if !prefs.InlineErrors || a.java.inlays[demoRel] != 1 {
-		t.Errorf("back on: setting %v, inlays %d", prefs.InlineErrors, a.java.inlays[demoRel])
+	if !prefs.InlineErrors || len(a.java.inlays[demoRel]) != 1 {
+		t.Errorf("back on: setting %v, inlays %d", prefs.InlineErrors, len(a.java.inlays[demoRel]))
 	}
 }
 

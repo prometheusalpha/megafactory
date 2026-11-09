@@ -176,6 +176,10 @@ func (a *app) tabMenu(svc ui.Services, m *ui.Menu, t *tab) {
 	if m.Item("Reveal in Tree").Disabled(!file).Chosen() {
 		a.revealInTree(t.path)
 	}
+	m.Separator()
+	if m.Item("Compare with HEAD").Disabled(!file || !a.git.ok).Chosen() {
+		a.compareWithHEAD(t)
+	}
 }
 
 // revealInTree selects a file in the tree, and gives its row the focus,

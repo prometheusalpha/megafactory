@@ -69,15 +69,15 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 
 ## Phase 3 — Git
 
-- [ ] 3.1 `internal/git`: wrapper `git` CLI, detect repo, branch hiện tại trên status bar
-- [ ] 3.2 Gutter changes: `DiffBase` = `git show HEAD:<path>`, cập nhật sau commit/checkout
-- [ ] 3.3 Inline blame (bật/tắt): `git blame --porcelain`, inlay cuối dòng có con trỏ (tác giả, thời gian, summary)
-- [ ] 3.4 Blame lề trái (bật/tắt): cột tự vẽ cạnh editor, đồng bộ qua `ScrollY`/`LineTop`; tắt soft wrap khi bật
-- [ ] 3.5 Panel Changes: danh sách file modified/added/deleted/untracked
-- [ ] 3.6 Diff view (`editor.DiffView`, split/unified) cho file trong Changes và "Compare with HEAD" từ tab
-- [ ] 3.7 Branch picker có search: local, remote, tag
-- [ ] 3.8 Checkout: branch local, remote (tạo tracking branch), tag/commit (detached), tạo branch mới từ HEAD
-- [ ] 3.9 Xử lý working tree dirty khi checkout: báo lỗi git rõ ràng, gợi ý stash
+- [x] 3.1 `internal/git`: wrapper `git` CLI, detect repo, branch hiện tại trên status bar
+- [x] 3.2 Gutter changes: `DiffBase` = `git show HEAD:<path>`, cập nhật sau commit/checkout
+- [x] 3.3 Inline blame (bật/tắt): `git blame --porcelain`, inlay cuối dòng có con trỏ (tác giả, thời gian, summary)
+- [x] 3.4 Blame lề trái (bật/tắt): cột tự vẽ cạnh editor, đồng bộ qua `ScrollY`/`LineTop`; tắt soft wrap khi bật
+- [x] 3.5 Panel Changes: danh sách file modified/added/deleted/untracked
+- [x] 3.6 Diff view (`editor.DiffView`, split/unified) cho file trong Changes và "Compare with HEAD" từ tab
+- [x] 3.7 Branch picker có search: local, remote, tag
+- [x] 3.8 Checkout: branch local, remote (tạo tracking branch), tag/commit (detached), tạo branch mới từ HEAD
+- [x] 3.9 Xử lý working tree dirty khi checkout: báo lỗi git rõ ràng, gợi ý stash
 
 ## Phase 4 — Terminal + Run
 

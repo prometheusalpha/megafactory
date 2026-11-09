@@ -24,9 +24,14 @@ type settings struct {
 	// InlineErrors shows each problem's message at the end of its line,
 	// as an inlay, rather than in the hover alone.
 	InlineErrors bool `json:"inlineErrors"`
+	// InlineBlame and GutterBlame are off by default: the editor has one
+	// inlay list (shared with inline errors), and the gutter column costs
+	// width.
+	InlineBlame bool `json:"inlineBlame"`
+	GutterBlame bool `json:"gutterBlame"`
 }
 
-var defaultSettings = settings{EditorLineHeight: 1.5, Appearance: "system", Theme: "Default", InlineErrors: true}
+var defaultSettings = settings{EditorLineHeight: 1.5, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: false, GutterBlame: false}
 
 var prefs = defaultSettings
 

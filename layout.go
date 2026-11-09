@@ -30,6 +30,9 @@ type tab struct {
 	path string
 	name string
 	ed   *editor.State
+	// Diff tabs have no ed; they show a DiffState instead.
+	diff    *editor.DiffState
+	diffRel string
 }
 
 const settingsPath = "megafactory:settings"
@@ -116,6 +119,8 @@ type app struct {
 	// page's tasks of it.
 	java   javaService
 	builds buildView
+	// Phase 3 Git state.
+	git gitService
 	// pendingLine is where a tab's editor puts the caret once it shows,
 	// as a problem's or a definition's open asks.
 	pendingLine *openLine
@@ -163,6 +168,7 @@ func (a *app) view(c *ui.Context) {
 	// The active file's text goes to the server as it changes, a frame
 	// after.
 	a.javaFrame()
+	a.gitFrame()
 	c.OnShortcut(ui.Cmd, ui.KeyB, func() { a.showSidebar = !a.showSidebar })
 	c.OnShortcut(ui.Cmd, ui.KeyJ, func() { a.showBottom = !a.showBottom })
 	c.OnShortcut(ui.Cmd, ui.KeyO, a.openFolder)
@@ -192,6 +198,7 @@ func (a *app) view(c *ui.Context) {
 		a.statusBar(c, k)
 	})
 	a.recentPaletteView(c, k)
+	a.branchPickerView(c, k)
 }
 
 // divider sits in the gap between two cards and resizes the one whose
@@ -351,7 +358,7 @@ func (a *app) sidebar(c *ui.Context, k *colors) ui.Element {
 			case a.sidePane == 0:
 				a.tree(c, k)
 			default:
-				placeholder(c, k, "Changes — Phase 3")
+				a.changesPage(c, k)
 			}
 		})
 	})
@@ -482,6 +489,7 @@ func (a *app) openFile(n *node) {
 			a.tabs = append(a.tabs, t)
 			a.active = len(a.tabs) - 1
 			a.javaTabOpened(t)
+			a.gitTabOpened(t)
 		}
 	})
 }
@@ -504,6 +512,7 @@ func (a *app) activate(path string) bool {
 }
 
 func (a *app) closeTab(i int) {
+	a.gitTabClosed(a.tabs[i])
 	a.javaDidClose(a.tabs[i])
 	a.tabs = slices.Delete(a.tabs, i, i+1)
 	if a.active >= len(a.tabs) || a.active > i {
@@ -535,6 +544,10 @@ func (a *app) editorCard(c *ui.Context, k *colors) ui.Element {
 			return
 		}
 		cur := a.tabs[a.active]
+		if cur.diff != nil {
+			a.diffPage(c, k, cur)
+			return
+		}
 		if cur.ed == nil {
 			a.settingsPage(c, k)
 			return
@@ -555,7 +568,16 @@ func (a *app) editorCard(c *ui.Context, k *colors) ui.Element {
 		}
 		// Each file keeps its own editor widget state (scroll, focus).
 		c.Key(cur.path)
-		editor.View(c, cur.ed).Grow(1).MinHeight(0).FillWidth().AutoFocus()
+		if prefs.GutterBlame && a.git.ok {
+			// A Row centers its children across its axis unless told to
+			// stretch them; without it the editor collapses to zero height.
+			ui.Row(c).Grow(1).MinHeight(0).FillWidth().AlignItems(ui.Stretch).Children(func() {
+				a.blameGutter(c, k, cur)
+				editor.View(c, cur.ed).Grow(1).MinHeight(0).AutoFocus()
+			})
+		} else {
+			editor.View(c, cur.ed).Grow(1).MinHeight(0).FillWidth().AutoFocus()
+		}
 		// A problem's or a definition's line waits for the editor the
 		// frame builds, so that it scrolls and colors as the others.
 		if a.pendingLine != nil && a.pendingLine.path == cur.path {
@@ -586,6 +608,8 @@ func (a *app) tabBar(c *ui.Context, k *colors) {
 						iconName := "settings-2"
 						if tb.ed != nil {
 							iconName = fileIcon(tb.name)
+						} else if tb.diff != nil {
+							iconName = fileIcon(tb.diffRel)
 						}
 						ui.Icon(c, icon(iconName)).Size(14, 14).TextColor(k.iconMuted)
 						col := k.textMuted
@@ -657,7 +681,7 @@ func (a *app) statusBar(c *ui.Context, k *colors) {
 	ui.Row(c).Height(26).Gap(16).Padding(0, 16).AlignItems(ui.Center).Children(func() {
 		faint := func(s string) { ui.Text(c, s).FontSize(11.5).TextColor(k.textFaint).SingleLine() }
 		if a.root != nil {
-			faint(a.branch)
+			a.gitBranchChip(c, k)
 			a.serversStatus(c, k)
 			a.javaStatus(c, k)
 			a.syncStatus(c, k)

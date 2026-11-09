@@ -22,9 +22,10 @@ func (a *app) openProject(dir string) {
 	a.stopJava()
 	a.project = dir
 	a.builds = buildView{}
+	a.gitProjectOpened()
 	a.pendingLine = nil
 	a.root = &node{name: filepath.Base(dir), dir: true, open: true}
-	a.tabs = slices.DeleteFunc(a.tabs, func(t *tab) bool { return t.ed != nil })
+	a.tabs = slices.DeleteFunc(a.tabs, func(t *tab) bool { return t.ed != nil || t.diff != nil })
 	a.active, a.selected, a.treeFocus = 0, "", ""
 	tree := a.root
 	a.stopWatch = a.host.watch(dir, func(dirs []string) {
@@ -111,6 +112,7 @@ func (a *app) refresh(dirs []string) {
 		a.root.at(d).walkLoaded(a.loadDir)
 	}
 	a.reloadTabs(dirs)
+	a.gitRefresh()
 }
 
 // at is the node at a project path, or the deepest the tree has above it,

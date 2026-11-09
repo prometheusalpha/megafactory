@@ -109,16 +109,16 @@ type javaService struct {
 	// tests need: a window must send them off its UI thread.
 	syncQueue bool
 
-	// inlays counts the hints each tab shows, which the editor draws but
-	// keeps nowhere to ask.
-	inlays map[string]int
+	// inlays keeps the Java hints each tab shows so they can be merged
+	// with Git's.
+	inlays map[string][]editor.Inlay
 }
 
 func newJavaService() javaService {
 	return javaService{
 		diagnostics: map[string]javaFile{},
 		sent:        map[string]sentDoc{},
-		inlays:      map[string]int{},
+		inlays:      map[string][]editor.Inlay{},
 	}
 }
 
@@ -271,7 +271,7 @@ func (a *app) stopJava() {
 	j.progress, j.downloading = setup.Progress{}, false
 	j.diagnostics = map[string]javaFile{}
 	j.sent = map[string]sentDoc{}
-	j.inlays = map[string]int{}
+	j.inlays = map[string][]editor.Inlay{}
 	j.buildChanged = false
 	j.buildSigs = nil
 	// The documents the server holds, named with the project they are in,
@@ -815,7 +815,7 @@ func (a *app) setInlays(t *tab) {
 	j := &a.java
 	if !isJavaPath(t.path) || !prefs.InlineErrors {
 		delete(j.inlays, t.path)
-		t.ed.SetInlays(nil)
+		a.applyInlays(t)
 		return
 	}
 	snap := t.ed.Buffer.Snapshot()
@@ -825,8 +825,8 @@ func (a *app) setInlays(t *tab) {
 		line := lineAt(snap, d.Start)
 		inlays = append(inlays, editor.Inlay{Offset: snap.LineEnd(line), Text: " " + clip(firstLine(d.Message), 80)})
 	}
-	t.ed.SetInlays(inlays)
-	j.inlays[t.path] = len(inlays)
+	j.inlays[t.path] = inlays
+	a.applyInlays(t)
 }
 
 // applyInlineSettings shows or clears the problems in every Java tab, as

@@ -28,6 +28,18 @@ func (a *app) settingsPage(c *ui.Context, k *colors) {
 					a.applyInlineSettings()
 				}
 			})
+			section(c, k, "Git", "Blame annotations in the editor.", func() {
+				inline := ui.Checkbox(c, &prefs.InlineBlame, "Show blame on the caret's line")
+				if inline.Changed() {
+					saveSettings()
+					a.applyBlameSettings()
+				}
+				gutter := ui.Checkbox(c, &prefs.GutterBlame, "Show blame in the left gutter")
+				if gutter.Changed() {
+					saveSettings()
+					a.applyBlameSettings()
+				}
+			})
 		})
 	})
 }
