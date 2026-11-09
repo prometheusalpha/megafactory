@@ -60,36 +60,50 @@ func (a *app) ensureServers() {
 		return
 	}
 	s.phase, s.err, s.progress = serversDownloading, nil, setup.Progress{}
-	arts, client, root, update, after := s.artifacts, s.client, serversDir(), a.host.update, a.host.after
 	a.host.run(func() func() {
-		var err error
-		for _, art := range arts {
-			// A redraw per percent, not per read.
-			shown := int64(-1)
-			_, err = setup.Ensure(context.Background(), client, root, art, func(p setup.Progress) {
-				if pct := percent(p); pct != shown {
-					shown = pct
-					update(func() { s.progress = p })
-				}
-			})
-			if err != nil {
-				break
-			}
-		}
-		return func() {
-			if err != nil {
-				log.Printf("servers: %v", err)
-				s.phase, s.err = serversFailed, err
-				return
-			}
-			s.phase = serversReady
-			// Installed before, it says nothing.
-			if s.progress.Done > 0 {
-				s.justReady = true
-				after(4*time.Second, func() { s.justReady = false })
-			}
-		}
+		err := a.installServers(context.Background(), func(p setup.Progress) {
+			a.host.update(func() { s.progress = p })
+		})
+		return func() { a.serversDone(err) }
 	})
+}
+
+// installServers downloads and unpacks the servers, blocking, and says how
+// far it is through progress as it goes. It is the install of the status
+// bar and of the language server's start.
+func (a *app) installServers(ctx context.Context, progress func(setup.Progress)) error {
+	s := &a.servers
+	for _, art := range s.artifacts {
+		// A redraw per percent, not per read.
+		shown := int64(-1)
+		_, err := setup.Ensure(ctx, s.client, serversDir(), art, func(p setup.Progress) {
+			if pct := percent(p); pct != shown {
+				shown = pct
+				progress(p)
+			}
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// serversDone ends an install: ready, or failed with its error, and a
+// moment's notice when it downloaded something.
+func (a *app) serversDone(err error) {
+	s := &a.servers
+	if err != nil {
+		log.Printf("servers: %v", err)
+		s.phase, s.err = serversFailed, err
+		return
+	}
+	s.phase = serversReady
+	// Installed before, it says nothing.
+	if s.progress.Done > 0 {
+		s.justReady = true
+		a.host.after(4*time.Second, func() { s.justReady = false })
+	}
 }
 
 func percent(p setup.Progress) int64 {
@@ -104,6 +118,11 @@ func percent(p setup.Progress) int64 {
 // failed; quietly once installed.
 func (a *app) serversStatus(c *ui.Context, k *colors) {
 	s := &a.servers
+	// The language service reports its own downloads and state while it
+	// is on; the install's status shows when it is not wired, as in tests.
+	if a.java.status != javaOff {
+		return
+	}
 	th := c.Theme()
 	faint := func(t string) ui.Element { return ui.Text(c, t).FontSize(11.5).TextColor(k.textFaint).SingleLine() }
 	loud := func(iconName string, col ui.Color, t string) ui.Element {

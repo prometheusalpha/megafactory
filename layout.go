@@ -111,6 +111,14 @@ type app struct {
 	palette *recentPalette
 
 	servers servers
+
+	// java is the language server of the project, and builds the Build
+	// page's tasks of it.
+	java   javaService
+	builds buildView
+	// pendingLine is where a tab's editor puts the caret once it shows,
+	// as a problem's or a definition's open asks.
+	pendingLine *openLine
 }
 
 // newApp opens no project: main opens the one of st once the window is
@@ -138,6 +146,7 @@ func newApp(st windowState) *app {
 		bottomH:     st.BottomH,
 		runConfig:   "DemoApplication",
 		runConfigs:  []string{"DemoApplication", "mvn clean install", "All tests"},
+		java:        newJavaService(),
 	}
 }
 
@@ -151,6 +160,9 @@ func (a *app) state() windowState {
 }
 
 func (a *app) view(c *ui.Context) {
+	// The active file's text goes to the server as it changes, a frame
+	// after.
+	a.javaFrame()
 	c.OnShortcut(ui.Cmd, ui.KeyB, func() { a.showSidebar = !a.showSidebar })
 	c.OnShortcut(ui.Cmd, ui.KeyJ, func() { a.showBottom = !a.showBottom })
 	c.OnShortcut(ui.Cmd, ui.KeyO, a.openFolder)
@@ -241,7 +253,13 @@ func (a *app) titleBar(c *ui.Context, k *colors) {
 		ui.Row(c).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
 			iconButton(c, k, "play", "Run '"+a.runConfig+"'", 30, 16)
 			iconButton(c, k, "bug", "Debug '"+a.runConfig+"'", 30, 17)
-			iconButton(c, k, "refresh-cw", "Sync Maven/Gradle", 30, 16)
+			sync := iconButton(c, k, "refresh-cw", "Sync Maven/Gradle", 30, 16)
+			if a.java.buildChanged {
+				sync.Background(k.selected)
+			}
+			if sync.Clicked() {
+				a.syncBuild()
+			}
 			if iconButton(c, k, "panel-bottom", "Toggle Panel  ⌘J", 30, 17).Clicked() {
 				a.showBottom = !a.showBottom
 			}
@@ -457,8 +475,13 @@ func (a *app) openFile(n *node) {
 			}
 			buf := editor.NewBuffer(string(data))
 			buf.SetLanguage(languageFor(n.name))
-			a.tabs = append(a.tabs, &tab{path: n.path, name: n.name, ed: &editor.State{Buffer: buf, WrapGuides: []int{120}}})
+			// Diagnostics or inlays may build the editor before its first
+			// frame, which takes the style then and not again.
+			ed := &editor.State{Buffer: buf, WrapGuides: []int{120}, Font: code.editorFont(), LineHeight: prefs.EditorLineHeight}
+			t := &tab{path: n.path, name: n.name, ed: ed}
+			a.tabs = append(a.tabs, t)
 			a.active = len(a.tabs) - 1
+			a.javaTabOpened(t)
 		}
 	})
 }
@@ -481,6 +504,7 @@ func (a *app) activate(path string) bool {
 }
 
 func (a *app) closeTab(i int) {
+	a.javaDidClose(a.tabs[i])
 	a.tabs = slices.Delete(a.tabs, i, i+1)
 	if a.active >= len(a.tabs) || a.active > i {
 		a.active = max(0, a.active-1)
@@ -522,9 +546,24 @@ func (a *app) editorCard(c *ui.Context, k *colors) ui.Element {
 		}
 		cur.ed.Theme = th
 		cur.ed.Font, cur.ed.LineHeight = code.editorFont(), prefs.EditorLineHeight
+		// The server answers a Java file's completions, hovers and
+		// definitions; the editor asks through these.
+		if isJavaPath(cur.path) {
+			cur.ed.OnCompletion = func(r editor.CompletionRequest) { a.javaComplete(cur, r) }
+			cur.ed.OnHover = func(r editor.HoverRequest) { a.javaHover(cur, r) }
+			cur.ed.OnDefinition = func(offset int) { a.javaDefinition(cur, offset) }
+		}
 		// Each file keeps its own editor widget state (scroll, focus).
 		c.Key(cur.path)
 		editor.View(c, cur.ed).Grow(1).MinHeight(0).FillWidth().AutoFocus()
+		// A problem's or a definition's line waits for the editor the
+		// frame builds, so that it scrolls and colors as the others.
+		if a.pendingLine != nil && a.pendingLine.path == cur.path {
+			line := a.pendingLine.line
+			a.pendingLine = nil
+			cur.ed.GoTo(editor.Pos{Line: line})
+			cur.ed.ScrollTo(line)
+		}
 	})
 	return e
 }
@@ -572,7 +611,13 @@ func (a *app) tabBar(c *ui.Context, k *colors) {
 
 func (a *app) bottomPanel(c *ui.Context, k *colors) ui.Element {
 	type page struct{ icon, label string }
-	pages := []page{{"play", "Run"}, {"bug", "Debug"}, {"terminal", "Terminal"}, {"circle-alert", "Problems"}}
+	pages := []page{
+		{"play", "Run"},
+		{"bug", "Debug"},
+		{"terminal", "Terminal"},
+		{"circle-alert", a.problemsLabel()},
+		{"refresh-cw", "Build"},
+	}
 	e := a.focusable(c, k, focusBottom)
 	e.Children(func() {
 		ui.Row(c).Height(headerH).Padding(0, 6, 0, 8).AlignItems(ui.Center).Children(func() {
@@ -599,7 +644,9 @@ func (a *app) bottomPanel(c *ui.Context, k *colors) ui.Element {
 			case 2:
 				placeholder(c, k, "Terminal (libghostty) — Phase 4")
 			case 3:
-				placeholder(c, k, "Problems from jdtls — Phase 2")
+				a.problemsPage(c, k)
+			case 4:
+				a.buildPage(c, k)
 			}
 		})
 	})
@@ -612,6 +659,8 @@ func (a *app) statusBar(c *ui.Context, k *colors) {
 		if a.root != nil {
 			faint(a.branch)
 			a.serversStatus(c, k)
+			a.javaStatus(c, k)
+			a.syncStatus(c, k)
 		}
 		ui.Spacer(c)
 		if len(a.tabs) > 0 && a.tabs[a.active].ed != nil {

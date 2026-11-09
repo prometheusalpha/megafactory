@@ -21,6 +21,13 @@ func (a *app) settingsPage(c *ui.Context, k *colors) {
 					}
 				})
 			})
+			section(c, k, "Java", "What the language server shows in the editor.", func() {
+				cb := ui.Checkbox(c, &prefs.InlineErrors, "Show problems inline")
+				if cb.Changed() {
+					saveSettings()
+					a.applyInlineSettings()
+				}
+			})
 		})
 	})
 }

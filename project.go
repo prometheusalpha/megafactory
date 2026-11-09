@@ -17,7 +17,12 @@ func (a *app) openProject(dir string) {
 	if a.stopWatch != nil {
 		a.stopWatch()
 	}
+	// The old project's server closes before its tabs, whose paths need
+	// the old project to name.
+	a.stopJava()
 	a.project = dir
+	a.builds = buildView{}
+	a.pendingLine = nil
 	a.root = &node{name: filepath.Base(dir), dir: true, open: true}
 	a.tabs = slices.DeleteFunc(a.tabs, func(t *tab) bool { return t.ed != nil })
 	a.active, a.selected, a.treeFocus = 0, "", ""
@@ -54,11 +59,20 @@ func (a *app) loadDir(n *node) {
 				return
 			}
 			n.merge(entries)
-			if n == tree && javaProject(entries) {
-				a.ensureServers()
+			if n == tree {
+				a.considerJava(entries)
 			}
 		}
 	})
+}
+
+// considerJava starts the language server when the project is a Java one
+// and the one running is not its own: the root was just read.
+func (a *app) considerJava(entries []workspace.Entry) {
+	if !javaProject(entries) || a.java.project == a.project {
+		return
+	}
+	a.startJava(a.project)
 }
 
 // merge makes a folder's children its entries, keeping the nodes of those
@@ -89,6 +103,7 @@ func (n *node) merge(entries []workspace.Entry) {
 // under its folder, and a .gitignore changed there can ignore files
 // anywhere below. "." is everything, as after the watch lost track.
 func (a *app) refresh(dirs []string) {
+	a.noteBuildChanges(dirs)
 	for _, d := range dirs {
 		if d == "." {
 			d = ""

@@ -21,9 +21,12 @@ type settings struct {
 	Appearance string `json:"appearance"`
 	// Theme names one of themeChoices.
 	Theme string `json:"theme"`
+	// InlineErrors shows each problem's message at the end of its line,
+	// as an inlay, rather than in the hover alone.
+	InlineErrors bool `json:"inlineErrors"`
 }
 
-var defaultSettings = settings{EditorLineHeight: 1.5, Appearance: "system", Theme: "Default"}
+var defaultSettings = settings{EditorLineHeight: 1.5, Appearance: "system", Theme: "Default", InlineErrors: true}
 
 var prefs = defaultSettings
 

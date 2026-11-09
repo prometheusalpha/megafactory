@@ -27,6 +27,8 @@ func main() {
 	a := newApp(st)
 	a.recent = loadRecent()
 	a.servers = servers{artifacts: setup.Artifacts, client: http.DefaultClient}
+	// newApp starts none, as tests want: the app's starts jdtls.
+	a.java.starter = startLanguageServer(a)
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "megafactory",

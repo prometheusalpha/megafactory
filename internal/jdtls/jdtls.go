@@ -138,11 +138,18 @@ func InitializeParams(project string, pid int, bundles []string, runtimes []jdk.
 				"workspaceFolders": true,
 				"configuration":    true,
 				"applyEdit":        true,
+				// A build file changing is how the session asks jdtls to
+				// re-import a project.
+				"didChangeWatchedFiles": map[string]any{"dynamicRegistration": true},
 			},
 			"textDocument": map[string]any{
 				"synchronization": map[string]any{"didSave": true},
 				"completion": map[string]any{
-					"completionItem": map[string]any{"snippetSupport": true},
+					"completionItem": map[string]any{
+						"snippetSupport":       true,
+						"insertReplaceSupport": true,
+						"documentationFormat":  []string{"markdown", "plaintext"},
+					},
 				},
 				"hover":              map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
 				"definition":         map[string]any{"linkSupport": false},

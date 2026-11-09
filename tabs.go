@@ -30,6 +30,9 @@ func (a *app) save(t *tab, then func()) {
 			if t.ed.Buffer.Version() == snap.Version() {
 				t.ed.Buffer.MarkSaved()
 			}
+			// The server sees the file as saved, with the text just
+			// written, which this frame may not have sent yet.
+			a.javaDidSave(t)
 			if then != nil {
 				then()
 			}
@@ -231,6 +234,9 @@ func (a *app) reloadTabs(dirs []string) {
 				}
 				if text := string(data); strings.ReplaceAll(text, "\r\n", "\n") != b.String() {
 					b.Reset(text)
+					// A reloaded text is a change, not an open: the
+					// server keeps the document, at the new version.
+					a.javaChange(t)
 				}
 			}
 		})
