@@ -10,7 +10,6 @@ import (
 	"megafactory/internal/workspace"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/egoist/mygo/ui/editor"
 )
 
 // treeEdit is a name being typed in the tree: node's new name, or the
@@ -311,7 +310,7 @@ func (a *app) retarget(from, to string) {
 		}
 		t.path = to + rest
 		t.name = path.Base(t.path)
-		t.ed.Buffer.SetLanguage(editor.LanguageFor(t.name))
+		t.ed.Buffer.SetLanguage(languageFor(t.name))
 	}
 }
 

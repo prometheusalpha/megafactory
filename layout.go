@@ -442,7 +442,7 @@ func (a *app) openFile(n *node) {
 				return
 			}
 			buf := editor.NewBuffer(string(data))
-			buf.SetLanguage(editor.LanguageFor(n.name))
+			buf.SetLanguage(languageFor(n.name))
 			a.tabs = append(a.tabs, &tab{path: n.path, name: n.name, ed: &editor.State{Buffer: buf, WrapGuides: []int{120}}})
 			a.active = len(a.tabs) - 1
 		}
