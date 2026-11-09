@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 )
 
@@ -99,11 +100,35 @@ func (a *app) modifiedTabs() []*tab {
 	return mod
 }
 
+// closeTabs closes several tabs, asking once to save those modified.
+func (a *app) closeTabs(ts []*tab) {
+	closeAll := func() {
+		for _, t := range ts {
+			a.closeTabOf(t)
+		}
+	}
+	if !a.askToSave(ts, closeAll) {
+		closeAll()
+	}
+}
+
 // beforeCloseWindow asks to save the modified tabs as the window closes.
-// It reports whether the window must wait, and calls proceed once they
-// are saved or given up.
+// It reports whether the window must wait for proceed.
 func (a *app) beforeCloseWindow(proceed func()) (wait bool) {
-	mod := a.modifiedTabs()
+	return a.askToSave(a.tabs, proceed)
+}
+
+// askToSave asks to save the modified tabs of ts, all in one question,
+// then calls proceed once they are saved or given up; a failure to save
+// stops it. With none modified it asks nothing, calls nothing, and
+// reports false: the caller goes on as it is.
+func (a *app) askToSave(ts []*tab, proceed func()) (asked bool) {
+	var mod []*tab
+	for _, t := range ts {
+		if t.ed != nil && t.ed.Buffer.Modified() {
+			mod = append(mod, t)
+		}
+	}
 	if len(mod) == 0 {
 		return false
 	}
@@ -120,7 +145,6 @@ func (a *app) beforeCloseWindow(proceed func()) (wait bool) {
 	a.host.ask(q, func(button int) {
 		switch button {
 		case 0:
-			// The window closes once all are written; a failure keeps it.
 			left := len(mod)
 			for _, t := range mod {
 				a.save(t, func() {
@@ -134,6 +158,65 @@ func (a *app) beforeCloseWindow(proceed func()) (wait bool) {
 		}
 	})
 	return true
+}
+
+// tabMenu is a tab's context menu, as IntelliJ's.
+func (a *app) tabMenu(svc ui.Services, m *ui.Menu, t *tab) {
+	i := slices.Index(a.tabs, t)
+	if m.Item("Close").Shortcut(ui.Cmd, ui.KeyW).Chosen() {
+		a.requestClose(t)
+	}
+	if m.Item("Close Others").Disabled(len(a.tabs) < 2).Chosen() {
+		a.closeTabs(slices.DeleteFunc(slices.Clone(a.tabs), func(o *tab) bool { return o == t }))
+	}
+	if m.Item("Close to the Right").Disabled(i == len(a.tabs)-1).Chosen() {
+		a.closeTabs(slices.Clone(a.tabs[i+1:]))
+	}
+	if m.Item("Close All").Chosen() {
+		a.closeTabs(slices.Clone(a.tabs))
+	}
+	m.Separator()
+	file := t.ed != nil
+	if m.Item("Copy Path").Disabled(!file).Chosen() {
+		svc.WriteClipboard(a.abs(t.path))
+	}
+	if m.Item("Reveal in Tree").Disabled(!file).Chosen() {
+		a.revealInTree(t.path)
+	}
+}
+
+// revealInTree selects a file in the tree, and gives its row the focus,
+// opening the folders above it, which the tree builds toward
+// (expandToReveal) as they are read.
+func (a *app) revealInTree(rel string) {
+	a.showSidebar, a.sidePane, a.focus = true, 0, focusSidebar
+	a.selected, a.revealing = rel, rel
+}
+
+// expandToReveal opens the folders above a.revealing as far as the tree
+// has read them, reading the next, until it shows its row.
+func (a *app) expandToReveal() {
+	n := a.root
+	for name := range strings.SplitSeq(parentOf(a.revealing), "/") {
+		n.open = true
+		if !n.loaded {
+			a.loadDir(n)
+			return
+		}
+		if name == "" {
+			break
+		}
+		i := slices.IndexFunc(n.children, func(ch *node) bool { return ch.name == name })
+		if i < 0 {
+			a.revealing = "" // gone meanwhile
+			return
+		}
+		n = n.children[i]
+	}
+	n.open = true
+	if !n.loaded {
+		a.loadDir(n)
+	}
 }
 
 // reloadTabs reads again the files of unmodified tabs under dirs, which

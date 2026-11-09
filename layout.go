@@ -90,6 +90,7 @@ type app struct {
 	sidePane    int // 0 Project, 1 Git
 	selected    string
 	treeFocus   string // the path of the tree's row with the focus
+	revealing   string // the path the tree opens its folders to show
 	edit        *treeEdit
 	clip        *clipboard
 
@@ -303,6 +304,13 @@ func (a *app) sidebar(c *ui.Context, k *colors) ui.Element {
 					})
 				}
 			})
+			ui.Spacer(c)
+			// IntelliJ's Select Opened File.
+			if a.sidePane == 0 && len(a.tabs) > 0 && a.tabs[a.active].ed != nil {
+				if iconButton(c, k, "locate-fixed", "Select Opened File", 26, 15).Clicked() {
+					a.revealInTree(a.tabs[a.active].path)
+				}
+			}
 		})
 		ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 			switch {
@@ -320,6 +328,9 @@ func (a *app) sidebar(c *ui.Context, k *colors) ui.Element {
 
 func (a *app) tree(c *ui.Context, k *colors) {
 	tree := ui.TreeBase(c)
+	if a.revealing != "" {
+		a.expandToReveal()
+	}
 	// focused is the row with the keyboard's focus, which the tree's
 	// shortcuts act on.
 	var focused *node
@@ -332,6 +343,11 @@ func (a *app) tree(c *ui.Context, k *colors) {
 		}
 		it := tree.Item(open)
 		row := it.Row.Height(26).Gap(6).Padding(0, 8).PaddingStart(8 + 14*float32(it.Depth())).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+		if a.revealing != "" && a.revealing == n.path {
+			a.revealing = ""
+			// The focus too, so that the tree's keys act on it.
+			row.ScrollIntoView(ui.ScrollIntoViewOptions{Block: ui.ScrollCenter}).Focus()
+		}
 		if a.selected == n.path {
 			row.Background(k.selected)
 		} else if row.Hovered() {
@@ -476,6 +492,10 @@ func (a *app) editorCard(c *ui.Context, k *colors) ui.Element {
 			return
 		}
 		a.tabBar(c, k)
+		// A tab's menu may have closed them all; the next pass shows so.
+		if len(a.tabs) == 0 {
+			return
+		}
 		cur := a.tabs[a.active]
 		if cur.ed == nil {
 			a.settingsPage(c, k)
@@ -500,10 +520,14 @@ func (a *app) tabBar(c *ui.Context, k *colors) {
 		ui.Row(c).Height(headerH).Padding(0, 8).AlignItems(ui.Center).Children(func() {
 			tabs := ui.TabsBase(c, &a.active, len(a.tabs))
 			track(k, tabs.List).Children(func() {
-				for i, tb := range a.tabs {
+				// A tab's menu closes tabs as it builds: the pass goes on
+				// over those it began with, and the next shows the rest.
+				for i, tb := range slices.Clone(a.tabs) {
 					c.Key(tb.path)
 					active := i == a.active
 					t := trackTab(k, tabs.Tab(i), active).Padding(0, 4, 0, 10)
+					svc := c.Services()
+					t.ContextMenu(func(m *ui.Menu) { a.tabMenu(svc, m, tb) })
 					hovered := t.Hovered()
 					t.Children(func() {
 						iconName := "settings-2"

@@ -47,7 +47,7 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 - [x] 1.4 Fs watch: tree tự cập nhật khi file đổi ngoài app (`mygo.WatchFiles` hints, bỏ qua `.git`)
 - [x] 1.5 Context menu tree: New File, New Folder, Rename (inline), Delete (confirm → Thùng rác), Copy, Cut, Paste, Duplicate, Copy Path, Reveal in Finder
 - [x] 1.6 Tabs editor: mở/đóng, đánh dấu dirty, Cmd+S, Cmd+W, cảnh báo đóng tab chưa lưu (cả khi đóng window); tab chưa sửa tự đọc lại khi file đổi ngoài app
-- [ ] 1.7 Context menu tab: Close, Close Others, Close to the Right, Close All, Copy Path, Reveal in Tree
+- [x] 1.7 Context menu tab: Close, Close Others, Close to the Right, Close All, Copy Path, Reveal in Tree
 - [ ] 1.8 Highlight Java/XML/JSON/Markdown bằng `editor.LanguageFor`; tokenizer cho `.properties`
 - [ ] 1.9 Recent projects: lưu danh sách, palette Cmd+Shift+O, chọn → thay project trong window hiện tại (đóng tab, hỏi lưu file dirty)
 - [ ] 1.10 Test bằng `ui.NewTester` cho tree ops + tabs

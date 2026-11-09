@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -535,5 +536,124 @@ func TestTabsFollowTheDisk(t *testing.T) {
 	}
 	if !strings.HasPrefix(pom.String(), "x<?xml") {
 		t.Errorf("an edited tab took the disk's text: %q", pom.String()[:10])
+	}
+}
+
+// tabMenu chooses an item of a tab's context menu, right-clicking its
+// close button: the tree shows the tab's name first.
+func tabMenu(t *testing.T, tt *ui.Tester, name, item string) {
+	t.Helper()
+	menu(t, tt, "Close "+name, item)
+}
+
+// tabNames are the names of the open tabs, in order.
+func tabNames(a *app) []string {
+	var names []string
+	for _, t := range a.tabs {
+		names = append(names, t.name)
+	}
+	return names
+}
+
+func TestTabMenuCloses(t *testing.T) {
+	a, tt := openSample(t)
+	click(t, tt, "README.md", "pom.xml", "Settings  ⌘,")
+	if got := strings.Join(tabNames(a), ","); got != "README.md,pom.xml,Settings" {
+		t.Fatalf("tabs %s", got)
+	}
+	tabMenu(t, tt, "README.md", "Close to the Right")
+	if got := strings.Join(tabNames(a), ","); got != "README.md" {
+		t.Errorf("close to the right: %s", got)
+	}
+	click(t, tt, "pom.xml")
+	click(t, tt, "Settings  ⌘,")
+	tabMenu(t, tt, "pom.xml", "Close Others")
+	if got := strings.Join(tabNames(a), ","); got != "pom.xml" {
+		t.Errorf("close others: %s", got)
+	}
+	// One question for all the modified tabs that close.
+	click(t, tt, "README.md")
+	tt.Type("x")
+	click(t, tt, "pom.xml")
+	tt.Type("x")
+	var asked []string
+	a.host.ask = func(q question, done func(int)) { asked = append(asked, q.message); done(2) }
+	tabMenu(t, tt, "README.md", "Close All")
+	if len(asked) != 1 || asked[0] != "Save the changes to 2 files?" || len(a.tabs) != 2 {
+		t.Errorf("asked %q, tabs %d", asked, len(a.tabs))
+	}
+	a.host.ask = func(_ question, done func(int)) { done(1) }
+	tabMenu(t, tt, "README.md", "Close All")
+	if len(a.tabs) != 0 {
+		t.Errorf("close all, don't save: tabs %d", len(a.tabs))
+	}
+}
+
+func TestTabMenuRevealAndCopyPath(t *testing.T) {
+	a, tt, dir := sampleWithMenu(t)
+	click(t, tt, "resources", "config.json")
+	// Fold the tree, and hide it.
+	click(t, tt, "src")
+	a.showSidebar = false
+	tt.Frame()
+	tabMenu(t, tt, "config.json", "Reveal in Tree")
+	for range 4 {
+		tt.Frame()
+	}
+	if !a.showSidebar || a.selected != "src/main/resources/config.json" || a.revealing != "" || !tt.HasText("application.properties") {
+		t.Errorf("sidebar %v, selected %q, revealing %q", a.showSidebar, a.selected, a.revealing)
+	}
+	tabMenu(t, tt, "config.json", "Copy Path")
+	if got := tt.Clipboard(); got != filepath.Join(dir, "src/main/resources/config.json") {
+		t.Errorf("copied %q", got)
+	}
+	// The settings tab has no file.
+	click(t, tt, "Settings  ⌘,")
+	rightClick(t, tt, "Close Settings")
+	if err := tt.ChooseMenuItem("Reveal in Tree"); err == nil {
+		t.Error("revealed the settings")
+	}
+}
+
+// The tree's scroll stays where the user puts it: nothing to reveal is
+// not the project's row, whose path is "" too.
+func TestTreeScrolls(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "big")
+	os.MkdirAll(dir, 0o755)
+	for i := range 80 {
+		os.WriteFile(filepath.Join(dir, fmt.Sprintf("file%02d.txt", i)), nil, 0o644)
+	}
+	a := newApp(defaultState)
+	a.openProject(dir)
+	tt := ui.NewTester(a.view, 1280, 800)
+	tt.Scroll(100, 300, 0, 600)
+	tt.Frame()
+	tt.Frame()
+	if r, _ := tt.Find("file05.txt"); r.H != 0 {
+		t.Errorf("file05.txt still at %v after scrolling down", r)
+	}
+}
+
+func TestSelectOpenedFile(t *testing.T) {
+	a, tt, _ := sampleWithMenu(t)
+	click(t, tt, "resources", "config.json")
+	click(t, tt, "src") // folds the file away
+	click(t, tt, "Select Opened File")
+	for range 4 {
+		tt.Frame()
+	}
+	if a.selected != "src/main/resources/config.json" || !tt.HasText("config.json") {
+		t.Fatalf("selected %q", a.selected)
+	}
+	// The row has the focus: the tree's keys act on the file.
+	tt.Key(ui.Cmd, ui.KeyC)
+	if a.clip == nil || a.clip.path != "src/main/resources/config.json" {
+		t.Errorf("⌘C after selecting: clip %+v", a.clip)
+	}
+	// Nothing to select without a file: no button.
+	a.tabs = nil
+	tt.Frame()
+	if _, ok := tt.Find("Select Opened File"); ok {
+		t.Error("button shown with no file open")
 	}
 }
