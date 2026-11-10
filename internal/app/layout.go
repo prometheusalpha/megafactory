@@ -143,6 +143,7 @@ type App struct {
 
 	recent  []string // the projects opened last, the most recent first
 	palette *recentPalette
+	files   *filePalette
 
 	servers servers
 
@@ -241,6 +242,7 @@ func (a *App) View(c *ui.Context) {
 	c.OnShortcut(ui.Cmd, ui.KeyJ, func() { a.showBottom = !a.showBottom })
 	c.OnShortcut(ui.Cmd, ui.KeyO, a.OpenFolder)
 	c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyO, a.OpenRecentPalette)
+	c.OnShortcut(ui.Cmd, ui.KeyP, a.OpenFilePalette)
 	c.OnShortcut(ui.Cmd, ui.KeyComma, a.openSettings)
 	// On macOS the File menu takes these first, and does the same.
 	c.OnShortcut(ui.Cmd, ui.KeyS, a.SaveActive)
@@ -266,6 +268,7 @@ func (a *App) View(c *ui.Context) {
 		a.statusBar(c, k)
 	})
 	a.recentPaletteView(c, k)
+	a.filePaletteView(c, k)
 	a.branchPickerView(c, k)
 	a.runConfigsDialog(c, k)
 }

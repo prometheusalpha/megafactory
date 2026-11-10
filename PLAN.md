@@ -38,6 +38,7 @@ internal/dap/         DAP client → java-debug
 internal/build/       maven/gradle sync + goals/tasks
 internal/ai/          OpenAI-compatible client cho inline suggestion
 internal/recent/      lịch sử project
+internal/search/      Go to File: liệt kê file (git ls-files, fallback walk) + chấm điểm tên kiểu dbx Quick Open
 internal/setup/       tải + verify jdtls, java-debug
 ```
 
@@ -57,6 +58,7 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 - [x] 1.8 Highlight Java/XML/JSON/Markdown bằng `editor.LanguageFor`; tokenizer cho `.properties` (key, `=`/`:`, escape, dòng nối `\`, `${placeholder}` của Spring)
 - [x] 1.9 Recent projects: lưu danh sách, palette Cmd+Shift+O, chọn → thay project trong window hiện tại (đóng tab, hỏi lưu file dirty)
 - [x] 1.10 Test bằng `ui.NewTester` cho tree ops + tabs
+- [x] 1.11 Go to File (Cmd+P): popup tìm file theo tên, chấm điểm exact/initials/prefix/word-prefix/substring/fuzzy như dbx, highlight ký tự khớp, file ignored không hiện, query rỗng hiện file của các tab đang mở trước
 
 ## Phase 2 — jdtls
 

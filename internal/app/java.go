@@ -871,18 +871,8 @@ type openLine struct {
 // node when it shows the file, the disk's text otherwise. The caret waits
 // for the tab's editor, which is where it is scrolled.
 func (a *App) openAt(rel string, line int) {
-	a.focus = focusEditor
 	a.pendingLine = &openLine{path: rel, line: line}
-	if a.activate(rel) || a.root == nil {
-		return
-	}
-	if n := a.root.at(rel); n != nil && !n.dir && n.path == rel {
-		a.openFile(n)
-		return
-	}
-	// A file the tree has not read yet opens from the disk, as a
-	// definition's target outside open folders does.
-	a.openFile(&node{name: path.Base(rel), path: rel})
+	a.openRel(rel)
 }
 
 // javaComplete asks the server what completes the text at the caret, and
