@@ -40,9 +40,6 @@ func (a *App) runConsolePage(c *ui.Context, k *colors) {
 			if iconButton(c, k, "refresh-cw", "Rerun", 24, 13).Clicked() {
 				a.rerun()
 			}
-			if iconButton(c, k, "settings-2", "Edit Configurations", 24, 13).Clicked() {
-				a.editConfigurations()
-			}
 		})
 		ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 			ui.Column(c).Padding(0, 8, 8, 8).FillWidth().Children(func() {

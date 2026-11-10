@@ -336,9 +336,6 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 			if iconButton(c, k, "refresh-cw", "Rerun", 30, 16).Clicked() {
 				a.rerun()
 			}
-			if iconButton(c, k, "settings-2", "Edit Configurations", 30, 16).Clicked() {
-				a.editConfigurations()
-			}
 			if iconButton(c, k, "bug", "Debug", 30, 17).Clicked() {
 				a.startDebug()
 			}
@@ -394,9 +391,13 @@ func (a *App) runConfigSelect(c *ui.Context, k *colors) {
 		ui.Icon(c, icon("chevron-down")).Size(14, 14).TextColor(k.iconMuted)
 	})
 	sel.Popup(func(panel ui.Element) {
-		panel.Margin(6, 0, 0, 0).Padding(4).MinWidth(220).Radius(12).Background(k.panel).Border(1, k.panelBorder).
+		panel.Margin(6, 0, 0, 0).Padding(4).MinWidth(240).Radius(12).Background(k.panel).Border(1, k.panelBorder).
 			Shadow(0, 8, 24, 0, k.shadowFocused)
-		for _, cfg := range a.runStore.All() {
+		configs := a.runStore.All()
+		if len(configs) == 0 {
+			ui.Text(c, "No run configurations").FontSize(12).TextColor(k.textFaint).SingleLine().Padding(0, 10, 6, 10)
+		}
+		for _, cfg := range configs {
 			item := sel.Item(cfg.ID).Row().Height(28).Padding(0, 10).Gap(8).AlignItems(ui.Center).Radius(8).Label(cfg.Name)
 			if item.Highlighted() {
 				item.Background(k.selected)
@@ -406,12 +407,34 @@ func (a *App) runConfigSelect(c *ui.Context, k *colors) {
 				ui.Text(c, cfg.Name).FontSize(13).TextColor(k.text).SingleLine()
 			})
 		}
+		// The dialog is where configurations are written, so its one way
+		// in is here, among them, rather than a button of its own.
+		edit := sel.Item(editConfigsItem).Row().Height(28).Padding(0, 10).Gap(8).AlignItems(ui.Center).Radius(8).
+			Label("Edit Configurations…")
+		if edit.Highlighted() {
+			edit.Background(k.selected)
+		}
+		edit.Children(func() {
+			ui.Icon(c, icon("settings-2")).Size(13, 13).TextColor(k.iconMuted)
+			ui.Text(c, "Edit Configurations…").FontSize(13).TextColor(k.text).SingleLine()
+		})
 	})
+	// The item is a choice the select writes like any other: it opens the
+	// dialog and leaves the configuration the toolbar showed.
+	if a.runConfig == editConfigsItem {
+		a.runConfig = prev
+		a.editConfigurations()
+		return
+	}
 	if a.runConfig != prev {
 		a.runStore.Select(a.runConfig)
 		a.saveRunConfigs()
 	}
 }
+
+// editConfigsItem is the dropdown's entry to the dialog, in the same value
+// space as a configuration's id but never one.
+const editConfigsItem = "megafactory:edit-configs"
 
 // focusable makes a card take the user's attention when pressed.
 func (a *App) focusable(c *ui.Context, k *colors, which int) ui.Element {

@@ -293,9 +293,11 @@ func (a *App) runConfigsDialog(c *ui.Context, k *colors) {
 		return
 	}
 	ui.DialogBase(c.Key("run-configs"), &e.open, func(backdrop, panel ui.Element) {
-		backdrop.Background(ui.RGBA(0, 0, 0, 0.18))
-		panel.Width(680).MaxHeight(520).Padding(12).Gap(10).Radius(14).
-			Background(k.panel).Border(1, k.panelBorder).Shadow(0, 12, 40, 0, k.shadowFocused).
+		backdrop.Background(ui.RGBA(0, 0, 0, 0.28))
+		// One size, and clipped: the form scrolls inside it rather than
+		// growing the dialog past the window and painting over it.
+		panel.Width(680).Height(520).Clip().Padding(12).Gap(10).Radius(14).
+			Background(k.dialog).Border(1, k.panelBorder).Shadow(0, 12, 40, 0, k.shadowFocused).
 			Label("Run Configurations")
 		panel.Children(func() {
 			ui.Row(c).Height(30).AlignItems(ui.Center).Children(func() {
@@ -305,13 +307,11 @@ func (a *App) runConfigsDialog(c *ui.Context, k *colors) {
 					e.open = false
 				}
 			})
-			ui.Row(c).Grow(1).MinHeight(0).Gap(10).Children(func() {
+			ui.Row(c).Grow(1).MinHeight(0).Gap(10).AlignItems(ui.Stretch).Children(func() {
 				a.runConfigList(c, k, e)
 				a.runConfigForm(c, k, e)
 			})
-			if e.err != "" {
-				ui.Text(c, e.err).FontSize(12).TextColor(c.Theme().Danger)
-			}
+			a.runEditFooter(c, k, e)
 		})
 	})
 	if !e.open {
@@ -319,8 +319,44 @@ func (a *App) runConfigsDialog(c *ui.Context, k *colors) {
 	}
 }
 
+// runEditFooter is the dialog's last row: what failed to save, and the
+// buttons that keep or drop the draft.
+func (a *App) runEditFooter(c *ui.Context, k *colors, e *runEditState) {
+	ui.Row(c).Height(30).Shrink(0).Gap(6).AlignItems(ui.Center).Children(func() {
+		if e.err != "" {
+			ui.Text(c, e.err).FontSize(12).TextColor(c.Theme().Danger).SingleLine().Ellipsis("…")
+		}
+		ui.Spacer(c)
+		if !e.editing {
+			return
+		}
+		if ui.Button(c, "Save").Clicked() {
+			a.saveRunDraft(e)
+		}
+		if ui.Button(c, "Cancel").Clicked() {
+			e.editing, e.err = false, ""
+		}
+	})
+}
+
+// saveRunDraft writes the draft, and keeps the dialog on the saved
+// configuration, or on nothing when it could not be saved.
+func (a *App) saveRunDraft(e *runEditState) {
+	cfg, err := a.runStore.Upsert(e.draft)
+	if err != nil {
+		e.err = err.Error()
+		return
+	}
+	e.sel, e.editing, e.err = cfg.ID, false, ""
+	if a.runConfig == "" {
+		a.selectRunConfig(cfg.ID)
+	} else {
+		a.saveRunConfigs()
+	}
+}
+
 func (a *App) runConfigList(c *ui.Context, k *colors, e *runEditState) {
-	ui.Column(c).Width(230).Gap(2).Children(func() {
+	ui.Column(c).Width(230).MinHeight(0).Gap(2).Children(func() {
 		ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 			for _, cfg := range a.runStore.All() {
 				c.Key(cfg.ID)
@@ -378,24 +414,6 @@ func (a *App) runConfigForm(c *ui.Context, k *colors, e *runEditState) {
 			}
 		case e.editing:
 			a.runConfigFields(c, k, e)
-			ui.Row(c).Gap(6).Children(func() {
-				if ui.Button(c, "Save").Clicked() {
-					cfg, err := a.runStore.Upsert(e.draft)
-					if err != nil {
-						e.err = err.Error()
-						return
-					}
-					e.sel, e.editing, e.err = cfg.ID, false, ""
-					if a.runConfig == "" {
-						a.selectRunConfig(cfg.ID)
-					} else {
-						a.saveRunConfigs()
-					}
-				}
-				if ui.Button(c, "Cancel").Clicked() {
-					e.editing, e.err = false, ""
-				}
-			})
 		default:
 			if cfg, ok := a.runStore.ByID(e.sel); ok {
 				ui.Text(c, cfg.Name).FontSize(13).FontWeight(600).TextColor(k.text)
@@ -410,20 +428,27 @@ func (a *App) runConfigForm(c *ui.Context, k *colors, e *runEditState) {
 	})
 }
 
+// fieldLook gives a field the chrome a dialog needs: the Base widgets come
+// without any, which would leave a dialog's fields invisible on its face.
+func fieldLook(k *colors, e ui.Element) ui.Element {
+	return e.Background(k.hover).Border(0.5, k.panelBorder).Radius(6)
+}
+
 func (a *App) runConfigFields(c *ui.Context, k *colors, e *runEditState) {
-	ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
+	ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Padding(0, 14, 0, 0).Children(func() {
 		ui.Column(c).Gap(6).FillWidth().Children(func() {
 			ui.Text(c, "Name").FontSize(11.5).TextColor(k.textMuted)
-			ui.TextInputBase(c, &e.draft.Name).Label("Name").FontSize(12.5).TextColor(k.text).FillWidth()
+			fieldLook(k, ui.TextInputBase(c, &e.draft.Name).Label("Name").FontSize(12.5).TextColor(k.text).
+				FillWidth().Height(26).Padding(0, 8))
 			for _, f := range specFor(e.draft.Kind).Fields {
 				ui.Text(c, f.Label).FontSize(11.5).TextColor(k.textMuted)
 				switch {
 				case f.Pick:
 					sel := ui.SelectBase(c, f.Ptr(&e.draft))
-					sel.Trigger.Row().Height(28).FillWidth().Padding(0, 8).Radius(8).
-						Background(k.track).Label(f.Label).Children(func() {
+					fieldLook(k, sel.Trigger.Row().Height(26).FillWidth().Padding(0, 8).
+						Label(f.Label).Children(func() {
 						ui.Text(c, *f.Ptr(&e.draft)).FontSize(12.5).TextColor(k.text).SingleLine()
-					})
+					}))
 					sel.Popup(func(panel ui.Element) {
 						panel.Padding(4).MinWidth(240).Radius(10).Background(k.panel).Border(1, k.panelBorder)
 						for _, m := range a.mainClasses {
@@ -435,9 +460,11 @@ func (a *App) runConfigFields(c *ui.Context, k *colors, e *runEditState) {
 						}
 					})
 				case f.Multi:
-					ui.TextAreaBase(c, f.Ptr(&e.draft)).Label(f.Label).FontSize(12.5).TextColor(k.text).Height(56).FillWidth()
+					fieldLook(k, ui.TextAreaBase(c, f.Ptr(&e.draft)).Label(f.Label).FontSize(12.5).TextColor(k.text).
+						Height(56).FillWidth().Padding(6, 8))
 				default:
-					ui.TextInputBase(c, f.Ptr(&e.draft)).Label(f.Label).FontSize(12.5).TextColor(k.text).FillWidth()
+					fieldLook(k, ui.TextInputBase(c, f.Ptr(&e.draft)).Label(f.Label).FontSize(12.5).TextColor(k.text).
+						FillWidth().Height(26).Padding(0, 8))
 				}
 			}
 		})

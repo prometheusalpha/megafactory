@@ -213,6 +213,50 @@ func TestRunConsoleStreamsAndStackLink(t *testing.T) {
 	}
 }
 
+// The dropdown is the way into Edit Configurations as well as the
+// configurations themselves, and says so when there are none.
+func TestRunConfigDropdownOpensTheDialog(t *testing.T) {
+	a, tt, _ := phase4App(t)
+	tt.Frame()
+	click(t, tt, "Run Configuration")
+	tt.Frame()
+	if !tt.HasText("No run configurations") || !tt.HasText("Edit Configurations…") {
+		t.Fatalf("popup shows %v", tt.Texts())
+	}
+	click(t, tt, "Edit Configurations…")
+	tt.Frame()
+	if a.runEdit == nil || !a.runEdit.open {
+		t.Fatal("the dialog did not open")
+	}
+	if a.runConfig != "" {
+		t.Errorf("selection became %q", a.runConfig)
+	}
+	if !tt.HasText("Run Configurations") {
+		t.Error("the dialog is not shown")
+	}
+}
+
+// Choosing it leaves the configuration the toolbar had.
+func TestRunConfigDropdownKeepsTheChoice(t *testing.T) {
+	a, tt, _ := phase4App(t)
+	cfg, err := a.runStore.Upsert(runcfg.Config{Name: "Demo", Kind: runcfg.SpringBoot, MainClass: "com.example.demo.DemoApplication"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.selectRunConfig(cfg.ID)
+	tt.Frame()
+	click(t, tt, "Run Configuration")
+	tt.Frame()
+	click(t, tt, "Edit Configurations…")
+	tt.Frame()
+	if a.runConfig != cfg.ID {
+		t.Errorf("selection became %q, want %q", a.runConfig, cfg.ID)
+	}
+	if a.runStore.Selected() != cfg.ID {
+		t.Errorf("saved selection %q", a.runStore.Selected())
+	}
+}
+
 // 4.8 The app's resolver asks java-debug for the classpath with the
 // project name resolveMainClass returned.
 func TestRunConfigResolvesClasspathThroughJavaDebug(t *testing.T) {

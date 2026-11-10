@@ -35,6 +35,9 @@ type colors struct {
 	track, trackBorder, tabActive ui.Color
 
 	panel, panelBorder ui.Color
+	// dialog is a dialog's face: opaque, as what it holds must not be read
+	// through the window behind it.
+	dialog ui.Color
 }
 
 var lightColors = colors{
@@ -66,6 +69,7 @@ var lightColors = colors{
 
 	panel:       ui.RGBA(252, 252, 253, 0.97),
 	panelBorder: ui.RGBA(0, 0, 0, 0.08),
+	dialog:      ui.Hex("#fbfbfd"),
 }
 
 var darkColors = colors{
@@ -97,6 +101,7 @@ var darkColors = colors{
 
 	panel:       ui.RGBA(38, 38, 42, 0.97),
 	panelBorder: ui.RGBA(255, 255, 255, 0.1),
+	dialog:      ui.Hex("#26262a"),
 }
 
 func colorsOf(c *ui.Context) *colors {
