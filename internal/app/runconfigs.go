@@ -102,13 +102,13 @@ func (r appResolver) Java(want string) (string, error) {
 	return j.Java(), nil
 }
 
-func (r appResolver) Classpath(mainClass string) ([]string, []string, error) {
+func (r appResolver) Classpath(mainClass string) (string, []string, []string, error) {
 	if r.srv == nil {
-		return nil, nil, errors.New("the Java language server is not ready")
+		return "", nil, nil, errors.New("the Java language server is not ready")
 	}
 	classes, err := r.srv.ResolveMainClasses()
 	if err != nil {
-		return nil, nil, err
+		return "", nil, nil, err
 	}
 	project := ""
 	for _, c := range classes {
@@ -120,7 +120,8 @@ func (r appResolver) Classpath(mainClass string) ([]string, []string, error) {
 	if project == "" && len(classes) > 0 {
 		project = classes[0].ProjectName
 	}
-	return r.srv.ResolveClasspath(mainClass, project)
+	modules, classpath, err := r.srv.ResolveClasspath(mainClass, project)
+	return project, modules, classpath, err
 }
 
 func (r appResolver) Wrapper(string) ([]string, error) { return r.build.Command() }

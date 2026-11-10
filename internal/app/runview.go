@@ -2,13 +2,11 @@ package app
 
 import (
 	"bytes"
-	"path"
 
 	"megafactory/internal/javalang"
 	"megafactory/internal/runner"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/egoist/mygo/ui/editor"
 )
 
 // consoleLine is one process line with which pipe it came from, so stdout
@@ -94,33 +92,21 @@ func (a *App) consoleLineView(c *ui.Context, k *colors, l consoleLine) {
 	})
 }
 
-// wireRunGutter marks a runnable class and offers Run from the gutter and
-// the editor's context menu. It runs every frame, as the editor copies its
-// State into the view it builds.
-func (a *App) wireRunGutter(c *ui.Context, ed *editor.State, t *tab) {
-	if t == nil || t.ed == nil || !isJavaPath(t.path) {
-		return
+// runnableIn is the class a tab offers to run: the line of its main method,
+// its qualified name, and whether the class is a Spring Boot application.
+// ok is false for a tab with no runnable class.
+func runnableIn(t *tab) (line int, fqcn string, spring, ok bool) {
+	if t == nil || t.ed == nil {
+		return 0, "", false, false
 	}
 	var buf bytes.Buffer
 	if _, err := t.ed.Buffer.Snapshot().WriteTo(&buf); err != nil {
-		return
+		return 0, "", false, false
 	}
 	src := buf.String()
-	line, fqcn, ok := javalang.Runnable(t.path, src)
+	line, fqcn, ok = javalang.Runnable(t.path, src)
 	if !ok {
-		return
+		return 0, "", false, false
 	}
-	spring := javalang.SpringBoot(t.path, src)
-	short := path.Base(fqcn)
-	ed.GutterMarks = []editor.GutterMark{{Line: line, Color: c.Theme().Success}}
-	ed.OnGutterClick = func(l int) {
-		if l == line {
-			a.runMain(t.path, fqcn, spring)
-		}
-	}
-	ed.ContextMenu = func(m *ui.Menu) {
-		if m.Item("Run '" + short + "'").Chosen() {
-			a.runMain(t.path, fqcn, spring)
-		}
-	}
+	return line, fqcn, javalang.SpringBoot(t.path, src), true
 }

@@ -13,8 +13,8 @@ type fakeResolver struct {
 }
 
 func (f fakeResolver) Java(string) (string, error) { return f.java, nil }
-func (f fakeResolver) Classpath(string) ([]string, []string, error) {
-	return []string{"/mods"}, []string{"/classes", "/lib/a.jar"}, nil
+func (f fakeResolver) Classpath(string) (string, []string, []string, error) {
+	return "demo", []string{"/mods"}, []string{"/classes", "/lib/a.jar"}, nil
 }
 func (f fakeResolver) Wrapper(tool string) ([]string, error) {
 	return []string{"/project/" + tool + "w", "-q"}, nil

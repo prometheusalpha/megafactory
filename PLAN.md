@@ -17,6 +17,9 @@ Java IDE native viết bằng Go trên MyGo (`github.com/egoist/mygo` v0.8.3, na
 | 9 | Theme | Mặc định là màu riêng của app; theme khác chọn trong Settings, embed từ repo gốc (bắt đầu với Catppuccin), không tự đọc theme Ghostty. Có System/Light/Dark |
 | 10 | File bị ignore | Không ẩn, hiện nhạt theo `git check-ignore` (tôn trọng `.gitignore`) |
 | 11 | Focus khi click file trong tree | Tạm thời: editor lấy focus; phím tắt tree với file chỉ dùng khi đi bằng phím mũi tên |
+| 12 | Breakpoint lưu ở đâu | `.megafactory/breakpoints.json`, dòng tính từ 1 như giao thức; sửa text thì dời breakpoint theo dòng |
+| 13 | Output của chương trình đang debug | `console: internalConsole` → ra Debug console của panel, không mở terminal cho java-debug (adapter không hỏi IDE mở terminal) |
+| 14 | Restart | java-debug 0.53.2 không có request `restart` của DAP → Restart = stop rồi chạy lại đúng config đó |
 
 ## Kiến trúc
 
@@ -97,14 +100,14 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 
 ## Phase 5 — Debug
 
-- [ ] 5.1 Breakpoints: `OnGutterClick` + `GutterMarks`, lưu theo project, bám dòng khi edit
-- [ ] 5.2 DAP client: `vscode.java.startDebugSession` → port → kết nối TCP, `launch` theo run config
-- [ ] 5.3 Dừng tại breakpoint: mở file, tô dòng hiện tại (`LineBackgrounds`)
-- [ ] 5.4 Toolbar: Continue, Step Over, Step Into, Step Out, Pause, Stop, Restart
-- [ ] 5.5 Panel Call Stack (threads + frames, click để nhảy tới frame)
-- [ ] 5.6 Panel Variables: cây lazy-load (`variables` theo `variablesReference`)
-- [ ] 5.7 Watch: thêm/sửa/xoá biểu thức, `evaluate` context `watch` mỗi lần dừng
-- [ ] 5.8 Debug console: output + evaluate biểu thức tại frame hiện tại
+- [x] 5.1 Breakpoints: `OnGutterClick` + `GutterMarks`, lưu theo project, bám dòng khi edit
+- [x] 5.2 DAP client: `vscode.java.startDebugSession` → port → kết nối TCP, `launch` theo run config
+- [x] 5.3 Dừng tại breakpoint: mở file, tô dòng hiện tại (`LineBackgrounds`)
+- [x] 5.4 Toolbar: Continue, Step Over, Step Into, Step Out, Pause, Stop, Restart
+- [x] 5.5 Panel Call Stack (threads + frames, click để nhảy tới frame)
+- [x] 5.6 Panel Variables: cây lazy-load (`variables` theo `variablesReference`)
+- [x] 5.7 Watch: thêm/sửa/xoá biểu thức, `evaluate` context `watch` mỗi lần dừng
+- [x] 5.8 Debug console: output + evaluate biểu thức tại frame hiện tại
 
 ## Phase 6 — AI inline suggestion
 

@@ -43,6 +43,16 @@ type fakeJava struct {
 	classPaths  [][]string
 	resolveErr  error
 	resolved    string
+
+	// debugPort is what startDebugSession answers; 0 fails the session.
+	debugPort int
+}
+
+func (f *fakeJava) StartDebugSession() (int, error) {
+	if f.debugPort == 0 {
+		return 0, errors.New("no debug port")
+	}
+	return f.debugPort, nil
 }
 
 func newFakeJava() *fakeJava {

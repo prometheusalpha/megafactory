@@ -67,7 +67,7 @@ type Command struct {
 // implements it; its methods run off the UI thread inside host.run.
 type Resolver interface {
 	Java(jdk string) (string, error)
-	Classpath(mainClass string) (modules, classes []string, err error)
+	Classpath(mainClass string) (projectName string, modules, classes []string, err error)
 	Wrapper(tool string) ([]string, error)
 	ProjectRoot() string
 	Build() BuildSystem
@@ -91,19 +91,23 @@ type Spec struct {
 type builder func(Config, Resolver) ([]string, error)
 
 // row is everything that varies by one kind. Adding a kind is one row; the
-// dialog, the validator, and the argv builder all read from here.
+// dialog, the validator, the argv builder and the debugger all read from
+// here.
 type row struct {
 	label    string
 	build    builder
 	validate func(Config) error
 	fields   func() []Field
+	// debug is set by the kinds a debug adapter launches itself: a Maven
+	// goal or a shell command has no Java program to debug.
+	debug func(Config, Resolver) (Debug, error)
 }
 
 var kindOrder = []Kind{Application, SpringBoot, Maven, Gradle, Shell}
 
 var table = map[Kind]row{
-	Application: {label: "Application", build: buildJava, validate: needMain, fields: appFields},
-	SpringBoot:  {label: "Spring Boot", build: buildSpring, validate: needMain, fields: springFields},
+	Application: {label: "Application", build: buildJava, validate: needMain, fields: appFields, debug: buildJavaDebug},
+	SpringBoot:  {label: "Spring Boot", build: buildSpring, validate: needMain, fields: springFields, debug: buildSpringDebug},
 	Maven:       {label: "Maven", build: buildMaven, validate: needGoals, fields: mavenFields},
 	Gradle:      {label: "Gradle", build: buildGradle, validate: needTasks, fields: gradleFields},
 	Shell:       {label: "Shell", build: buildShell, validate: needCmd, fields: shellFields},
@@ -134,17 +138,51 @@ func Resolve(cfg Config, r Resolver) (Command, error) {
 	if err != nil {
 		return Command{}, err
 	}
-	root := r.ProjectRoot()
-	dir := root
-	if cfg.WorkingDir != "" {
-		if filepath.IsAbs(cfg.WorkingDir) {
-			dir = cfg.WorkingDir
-		} else {
-			dir = filepath.Join(root, cfg.WorkingDir)
-		}
-	}
-	return Command{Argv: argv, Dir: dir, Env: envLines(cfg.Env)}, nil
+	return Command{Argv: argv, Dir: workDir(cfg, r), Env: envLines(cfg.Env)}, nil
 }
+
+// workDir is where a configuration runs: the project, or its own folder.
+func workDir(cfg Config, r Resolver) string {
+	root := r.ProjectRoot()
+	if cfg.WorkingDir == "" {
+		return root
+	}
+	if filepath.IsAbs(cfg.WorkingDir) {
+		return cfg.WorkingDir
+	}
+	return filepath.Join(root, cfg.WorkingDir)
+}
+
+// Debug is what a debug adapter launches: the JVM's own settings instead of
+// a command line, since java-debug runs java itself.
+type Debug struct {
+	MainClass   string
+	ProjectName string
+	Cwd         string
+	Java        string
+	VMArgs      string
+	Args        string
+	ModulePaths []string
+	ClassPaths  []string
+	Env         map[string]string
+}
+
+// DebugSpec is the debugger's counterpart of Resolve, dispatching through
+// the same table.
+func DebugSpec(cfg Config, r Resolver) (Debug, error) {
+	if err := cfg.Validate(); err != nil {
+		return Debug{}, err
+	}
+	row := table[cfg.Kind]
+	if row.debug == nil {
+		return Debug{}, fmt.Errorf("a %s configuration cannot be debugged", row.label)
+	}
+	return row.debug(cfg, r)
+}
+
+// Debuggable reports whether a kind is one a debug adapter launches, which
+// the debugger offers and the toolbar shows.
+func (k Kind) Debuggable() bool { return table[k].debug != nil }
 
 // Validate is the single validation boundary, called by Load and Upsert.
 func (c Config) Validate() error {
@@ -163,7 +201,7 @@ func javaCmd(cfg Config, r Resolver, extraVM string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	modules, classes, err := r.Classpath(cfg.MainClass)
+	_, modules, classes, err := r.Classpath(cfg.MainClass)
 	if err != nil {
 		return nil, err
 	}
@@ -189,14 +227,58 @@ func javaCmd(cfg Config, r Resolver, extraVM string) ([]string, error) {
 	return append(argv, strings.Fields(cfg.ProgramArgs)...), nil
 }
 
+// javaDebug is what java-debug launches with: the same class, paths and
+// VM options javaCmd builds a command line from.
+func javaDebug(cfg Config, r Resolver, extraVM string) (Debug, error) {
+	java, err := r.Java(cfg.JDK)
+	if err != nil {
+		return Debug{}, err
+	}
+	project, modules, classes, err := r.Classpath(cfg.MainClass)
+	if err != nil {
+		return Debug{}, err
+	}
+	if cfg.Module == "" && len(classes) == 0 {
+		return Debug{}, errors.New("no classpath for " + cfg.MainClass)
+	}
+	vm := []string{}
+	if cfg.VMOptions != "" {
+		vm = append(vm, cfg.VMOptions)
+	}
+	if extraVM != "" {
+		vm = append(vm, extraVM)
+	}
+	return Debug{
+		MainClass:   cfg.MainClass,
+		ProjectName: project,
+		Cwd:         workDir(cfg, r),
+		Java:        java,
+		VMArgs:      strings.Join(vm, " "),
+		Args:        cfg.ProgramArgs,
+		ModulePaths: modules,
+		ClassPaths:  classes,
+		Env:         envMap(cfg.Env),
+	}, nil
+}
+
 func buildJava(c Config, r Resolver) ([]string, error) { return javaCmd(c, r, "") }
 
 func buildSpring(c Config, r Resolver) ([]string, error) {
-	extra := ""
-	if c.Profiles != "" {
-		extra = "-Dspring.profiles.active=" + c.Profiles
+	return javaCmd(c, r, springVM(c))
+}
+
+func buildJavaDebug(c Config, r Resolver) (Debug, error) { return javaDebug(c, r, "") }
+
+func buildSpringDebug(c Config, r Resolver) (Debug, error) {
+	return javaDebug(c, r, springVM(c))
+}
+
+// springVM is the property that picks the application's profiles.
+func springVM(c Config) string {
+	if c.Profiles == "" {
+		return ""
 	}
-	return javaCmd(c, r, extra)
+	return "-Dspring.profiles.active=" + c.Profiles
 }
 
 func buildMaven(c Config, r Resolver) ([]string, error) {
@@ -233,6 +315,21 @@ func envLines(s string) []string {
 		if l = strings.TrimSpace(l); l != "" {
 			out = append(out, l)
 		}
+	}
+	return out
+}
+
+// envMap is envLines as an adapter's environment: a line without a name is
+// not one a process could have either, so it is left out.
+func envMap(s string) map[string]string {
+	out := map[string]string{}
+	for _, l := range envLines(s) {
+		if k, v, ok := strings.Cut(l, "="); ok && k != "" {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

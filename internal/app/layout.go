@@ -152,6 +152,8 @@ type App struct {
 	builds buildView
 	// Phase 3 Git state.
 	git gitService
+	// debug owns the debugger's state: session, breakpoints, panels.
+	debug debugService
 	// pendingLine is where a tab's editor puts the caret once it shows,
 	// as a problem's or a definition's open asks.
 	pendingLine *openLine
@@ -188,6 +190,7 @@ func newApp(st State) *App {
 		showBottom:  st.ShowBottom,
 		bottomH:     st.BottomH,
 		java:        newJavaService(),
+		debug:       newDebugService(),
 	}
 }
 
@@ -233,6 +236,7 @@ func (a *App) View(c *ui.Context) {
 	// after.
 	a.javaFrame()
 	a.gitFrame()
+	a.debugFrame()
 	c.OnShortcut(ui.Cmd, ui.KeyB, func() { a.showSidebar = !a.showSidebar })
 	c.OnShortcut(ui.Cmd, ui.KeyJ, func() { a.showBottom = !a.showBottom })
 	c.OnShortcut(ui.Cmd, ui.KeyO, a.OpenFolder)
@@ -335,7 +339,9 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 			if iconButton(c, k, "settings-2", "Edit Configurations", 30, 16).Clicked() {
 				a.editConfigurations()
 			}
-			iconButton(c, k, "bug", "Debug (Phase 5)", 30, 17)
+			if iconButton(c, k, "bug", "Debug", 30, 17).Clicked() {
+				a.startDebug()
+			}
 			sync := iconButton(c, k, "refresh-cw", "Sync Maven/Gradle", 30, 16)
 			if a.java.buildChanged {
 				sync.Background(k.selected)
@@ -651,7 +657,7 @@ func (a *App) editorCard(c *ui.Context, k *colors) ui.Element {
 			cur.ed.OnHover = func(r editor.HoverRequest) { a.javaHover(cur, r) }
 			cur.ed.OnDefinition = func(offset int) { a.javaDefinition(cur, offset) }
 		}
-		a.wireRunGutter(c, cur.ed, cur)
+		a.wireGutter(c, cur.ed, cur)
 		// Each file keeps its own editor widget state (scroll, focus).
 		c.Key(cur.path)
 		if prefs.GutterBlame && a.git.ok {
@@ -750,7 +756,7 @@ func (a *App) bottomPanel(c *ui.Context, k *colors) ui.Element {
 			case 0:
 				a.runConsolePage(c, k)
 			case 1:
-				placeholder(c, k, "Variables · Watches · Call stack — Phase 5")
+				a.debugPage(c, k)
 			case 2:
 				a.terminalPage(c, k)
 			case 3:

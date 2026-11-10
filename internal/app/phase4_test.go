@@ -222,12 +222,12 @@ func TestRunConfigResolvesClasspathThroughJavaDebug(t *testing.T) {
 		classPaths:  [][]string{{"/mods"}, {"/classes", "/lib/a.jar"}},
 	}
 	r := appResolver{app: a, project: a.project, srv: f}
-	mods, classes, err := r.Classpath("com.example.demo.DemoApplication")
+	project, mods, classes, err := r.Classpath("com.example.demo.DemoApplication")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.resolved != "com.example.demo.DemoApplication/demo" {
-		t.Errorf("classpath asked for %q", f.resolved)
+	if f.resolved != "com.example.demo.DemoApplication/demo" || project != "demo" {
+		t.Errorf("classpath asked for %q, project %q", f.resolved, project)
 	}
 	if len(mods) != 1 || mods[0] != "/mods" || len(classes) != 2 {
 		t.Errorf("mods %v classes %v", mods, classes)

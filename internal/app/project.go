@@ -23,6 +23,7 @@ func (a *App) OpenProject(dir string) {
 	a.closeTerms()
 	a.project = dir
 	a.loadRunConfigs()
+	a.loadBreakpoints()
 	a.builds = buildView{}
 	a.gitProjectOpened()
 	a.pendingLine = nil

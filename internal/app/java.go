@@ -43,6 +43,9 @@ type langServer interface {
 	BuildFilesChanged(paths ...string) error
 	ResolveMainClasses() ([]javalang.MainClass, error)
 	ResolveClasspath(mainClass, projectName string) (modules, classes []string, err error)
+	// StartDebugSession is java-debug's adapter, on a loopback port the
+	// debug client connects to.
+	StartDebugSession() (int, error)
 }
 
 // javaStarter starts a project's language server: it is given where the
