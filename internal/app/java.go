@@ -828,7 +828,7 @@ func (a *App) setInlays(t *tab) {
 	inlays := make([]editor.Inlay, 0, len(ds))
 	for _, d := range ds {
 		line := lineAt(snap, d.Start)
-		inlays = append(inlays, editor.Inlay{Offset: snap.LineEnd(line), Text: " " + clip(firstLine(d.Message), 80)})
+		inlays = append(inlays, editor.Inlay{Offset: snap.LineEnd(line), Text: " " + clip(firstLine(d.Message), 80), Trailing: true})
 	}
 	j.inlays[t.path] = inlays
 	a.applyInlays(t)

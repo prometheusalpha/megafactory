@@ -40,7 +40,7 @@ func (a *App) blameCaretInlay(t *tab) []editor.Inlay {
 	for _, bl := range bf.lines {
 		if bl.Line-1 == line {
 			snap := t.ed.Buffer.Snapshot()
-			return []editor.Inlay{{Offset: snap.LineEnd(line), Text: "  " + blameLabel(bl)}}
+			return []editor.Inlay{{Offset: snap.LineEnd(line), Text: "  " + blameLabel(bl), Trailing: true}}
 		}
 	}
 	return nil

@@ -32,10 +32,12 @@ func readEditorInlays(st *editor.State) ([]editor.Inlay, bool) {
 		if !kind.IsValid() || !at.IsValid() || !text.IsValid() {
 			return nil, false
 		}
-		if kind.Int() != 0 {
+		// Kind 1 is a suggestion and 2 a diff's mark, neither set by the app;
+		// 3 is the trailing text Inlay.Trailing makes.
+		if kind.Int() == 1 || kind.Int() == 2 {
 			continue
 		}
-		out = append(out, editor.Inlay{Offset: int(at.Int()), Text: text.String()})
+		out = append(out, editor.Inlay{Offset: int(at.Int()), Text: text.String(), Trailing: kind.Int() == 3})
 	}
 	return out, true
 }
@@ -101,7 +103,8 @@ func TestApplyInlaysComposeJavaAndBlame(t *testing.T) {
 	found := false
 	for _, in := range got {
 		if in.Offset == wantOffset && strings.HasPrefix(in.Text, "  ") {
-			found = true
+			// The caret must stay before the blame, not after it.
+			found = in.Trailing
 		}
 	}
 	if !found {
