@@ -15,6 +15,7 @@ func (a *App) keyActions() map[string]func() {
 		"nextTab":        func() { a.stepTab(1) },
 		"prevTab":        func() { a.stepTab(-1) },
 		"findFile":       a.OpenFilePalette,
+		"findInFiles":    a.OpenFindInFiles,
 	}
 }
 

@@ -38,7 +38,8 @@ internal/dap/         DAP client → java-debug
 internal/build/       maven/gradle sync + goals/tasks
 internal/ai/          OpenAI-compatible client cho inline suggestion
 internal/recent/      lịch sử project
-internal/search/      Go to File: liệt kê file (git ls-files, fallback walk) + chấm điểm tên kiểu dbx Quick Open
+internal/keymap/      action + phím mặc định + override trong settings.json
+internal/search/      Go to File: liệt kê file (git ls-files, fallback walk) + chấm điểm tên kiểu dbx Quick Open; Find in Files: regexp song song theo số core, có cancel
 internal/setup/       tải + verify jdtls, java-debug
 ```
 
@@ -59,6 +60,8 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 - [x] 1.9 Recent projects: lưu danh sách, palette Cmd+Shift+O, chọn → thay project trong window hiện tại (đóng tab, hỏi lưu file dirty)
 - [x] 1.10 Test bằng `ui.NewTester` cho tree ops + tabs
 - [x] 1.11 Go to File (Cmd+P): popup tìm file theo tên, chấm điểm exact/initials/prefix/word-prefix/substring/fuzzy như dbx, highlight ký tự khớp, file ignored không hiện, query rỗng hiện file của các tab đang mở trước
+- [x] 1.12 Keymap chỉnh được: Close Tab ⌘W, Close Other Tabs ⌘⇧W, Next/Prev Tab ⌃Tab/⌃⇧Tab, Go to File ⌘P, Find in Files ⌘⇧F; Settings → Keyboard shortcuts (bấm rồi nhấn phím, báo trùng, Reset); menu File dựng lại theo keymap, Close Window không còn phím
+- [x] 1.13 Find in Files (⌘⇧F): dialog, toggle Match case / Whole word / Regex, tìm trên đĩa (không thấy sửa chưa lưu), tối đa 500 kết quả, Enter/click mở file và chọn đúng đoạn khớp; lấy chữ đang chọn làm query
 
 ## Phase 2 — jdtls
 

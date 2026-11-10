@@ -145,6 +145,7 @@ type App struct {
 	recent  []string // the projects opened last, the most recent first
 	palette *recentPalette
 	files   *filePalette
+	findIn  *findInFiles
 
 	// keys is the shortcuts of keymap.Actions; keysChanged tells the
 	// window, whose menu bar shows some, that one was rebound.
@@ -280,6 +281,7 @@ func (a *App) View(c *ui.Context) {
 	})
 	a.recentPaletteView(c, k)
 	a.filePaletteView(c, k)
+	a.findInFilesView(c, k)
 	a.branchPickerView(c, k)
 	a.runConfigsDialog(c, k)
 }
@@ -710,10 +712,15 @@ func (a *App) editorCard(c *ui.Context, k *colors) ui.Element {
 		// A problem's or a definition's line waits for the editor the
 		// frame builds, so that it scrolls and colors as the others.
 		if a.pendingLine != nil && a.pendingLine.path == cur.path {
-			line := a.pendingLine.line
+			at := *a.pendingLine
 			a.pendingLine = nil
-			cur.ed.GoTo(editor.Pos{Line: line})
-			cur.ed.ScrollTo(line)
+			if at.n > 0 {
+				start := cur.ed.Buffer.Offset(editor.Pos{Line: at.line, Col: at.col})
+				cur.ed.Select(start, start+at.n)
+			} else {
+				cur.ed.GoTo(editor.Pos{Line: at.line})
+			}
+			cur.ed.ScrollTo(at.line)
 		}
 	})
 	return e

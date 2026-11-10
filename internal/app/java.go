@@ -865,14 +865,19 @@ func clip(s string, n int) string {
 type openLine struct {
 	path string
 	line int
+	// col and n select n bytes from byte col of the line, as a search's
+	// match; n 0 puts the caret at the line's start.
+	col, n int
 }
 
 // openAt opens a project file and puts the caret on a line: the tree's
 // node when it shows the file, the disk's text otherwise. The caret waits
 // for the tab's editor, which is where it is scrolled.
-func (a *App) openAt(rel string, line int) {
-	a.pendingLine = &openLine{path: rel, line: line}
-	a.openRel(rel)
+func (a *App) openAt(rel string, line int) { a.openSpan(openLine{path: rel, line: line}) }
+
+func (a *App) openSpan(at openLine) {
+	a.pendingLine = &at
+	a.openRel(at.path)
 }
 
 // javaComplete asks the server what completes the text at the caret, and
