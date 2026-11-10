@@ -21,6 +21,11 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 					}
 				})
 			})
+			section(c, k, "Project tree", "How the sidebar shows folders.", func() {
+				if ui.Checkbox(c, &prefs.CompactFolders, "Compact middle folders (a/b/c)").Changed() {
+					saveSettings()
+				}
+			})
 			section(c, k, "Java", "What the language server shows in the editor.", func() {
 				cb := ui.Checkbox(c, &prefs.InlineErrors, "Show problems inline")
 				if cb.Changed() {

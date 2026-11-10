@@ -216,8 +216,12 @@ func (a *App) expandToReveal() {
 	n := a.root
 	for name := range strings.SplitSeq(parentOf(a.revealing), "/") {
 		n.open = true
-		if !n.loaded {
-			a.loadDir(n)
+		// Its children are not in until the read answers; looking for the
+		// next folder among none would take it for gone.
+		if !n.read {
+			if !n.loaded {
+				a.loadDir(n)
+			}
 			return
 		}
 		if name == "" {

@@ -30,7 +30,8 @@ type node struct {
 	path     string // relative to the project, with slashes
 	dir      bool
 	open     bool
-	loaded   bool
+	loaded   bool // read, or being read
+	read     bool // children are what the disk listed, or failed to
 	ignored  bool
 	children []*node
 }
@@ -480,6 +481,9 @@ func (a *App) sidebar(c *ui.Context, k *colors) ui.Element {
 					a.revealInTree(a.tabs[a.active].path)
 				}
 			}
+			if a.sidePane == 0 {
+				a.treeOptions(c, k)
+			}
 		})
 		ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 			switch {
@@ -495,6 +499,40 @@ func (a *App) sidebar(c *ui.Context, k *colors) ui.Element {
 	return e
 }
 
+// treeOptions is the "…" of the tree's header, whose panel holds the
+// options of how the tree shows. They are the settings page's too.
+func (a *App) treeOptions(c *ui.Context, k *colors) {
+	var picked string
+	sel := ui.SelectBase(c, &picked)
+	tr := sel.Trigger.Row().Size(26, 26).Center().Radius(10).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label("Tree Options").Tooltip("Tree Options")
+	if tr.Hovered() || sel.Open() {
+		tr.Background(k.hover)
+	}
+	tr.Children(func() {
+		ui.Icon(c, icon("ellipsis")).Size(15, 15).TextColor(k.iconMuted)
+	})
+	sel.Popup(func(panel ui.Element) {
+		panel.Margin(6, 0, 0, 0).Padding(4).MinWidth(220).Radius(12).Background(k.panel).Border(1, k.panelBorder).
+			Shadow(0, 8, 24, 0, k.shadowFocused)
+		item := sel.Item("compact").Row().Height(28).Padding(0, 10).Gap(8).AlignItems(ui.Center).Radius(8).
+			Role(ui.RoleCheckBox).Label("Compact Middle Folders").Checked(prefs.CompactFolders)
+		if item.Highlighted() {
+			item.Background(k.selected)
+		}
+		item.Children(func() {
+			check := ui.Box(c).Size(14, 14).Shrink(0).Center()
+			if prefs.CompactFolders {
+				check.Children(func() { ui.Icon(c, icon("check")).Size(14, 14).TextColor(k.text) })
+			}
+			ui.Text(c, "Compact Middle Folders").FontSize(13).TextColor(k.text).SingleLine()
+		})
+	})
+	if picked == "compact" {
+		prefs.CompactFolders = !prefs.CompactFolders
+		saveSettings()
+	}
+}
+
 func (a *App) tree(c *ui.Context, k *colors) {
 	tree := ui.TreeBase(c)
 	if a.revealing != "" {
@@ -505,13 +543,19 @@ func (a *App) tree(c *ui.Context, k *colors) {
 	var focused *node
 	var item func(n *node)
 	item = func(n *node) {
+		// A folder whose only child is a folder shows as one row, a/b/c,
+		// that stands for the last of them.
+		label := n.name
+		if prefs.CompactFolders && n.dir && n != a.root {
+			n, label = a.compactChain(n)
+		}
 		c.Key(n.path)
 		var open *bool
 		if n.dir {
 			open = &n.open
 		}
 		it := tree.Item(open)
-		row := it.Row.Height(26).Gap(6).Padding(0, 8).PaddingStart(8 + 14*float32(it.Depth())).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+		row := it.Row.Height(26).Gap(6).Padding(0, 8).PaddingStart(8 + 10*float32(it.Depth())).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 		if a.revealing != "" && a.revealing == n.path {
 			a.revealing = ""
 			// The focus too, so that the tree's keys act on it.
@@ -571,7 +615,7 @@ func (a *App) tree(c *ui.Context, k *colors) {
 			if renaming {
 				a.nameInput(c, k)
 			} else {
-				ui.Text(c, n.name).FontSize(13).TextColor(textCol).SingleLine().Ellipsis("…")
+				ui.Text(c, label).FontSize(13).TextColor(textCol).SingleLine().Ellipsis("…")
 			}
 		})
 		it.Group(func() {
@@ -587,6 +631,23 @@ func (a *App) tree(c *ui.Context, k *colors) {
 	// Not while a name is typed, whose input has keys of its own.
 	if a.edit == nil {
 		a.treeShortcuts(tree.Root, func() *node { return focused })
+	}
+}
+
+// compactChain follows n down its only-folder children to the last, and
+// names the way as the row shows it. A folder not read yet is read, shut
+// as it is, for the row cannot tell whether it continues without.
+func (a *App) compactChain(n *node) (*node, string) {
+	label := n.name
+	for {
+		if !n.loaded {
+			a.loadDir(n)
+		}
+		if len(n.children) != 1 || !n.children[0].dir {
+			return n, label
+		}
+		n = n.children[0]
+		label += "/" + n.name
 	}
 }
 

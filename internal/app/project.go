@@ -56,6 +56,7 @@ func (a *App) loadDir(n *node) {
 			if a.root != tree {
 				return
 			}
+			n.read = true
 			// A folder that fails stays empty rather than retried each frame.
 			if err != nil {
 				log.Printf("read %s: %v", rel, err)
@@ -95,7 +96,7 @@ func (n *node) merge(entries []workspace.Entry) {
 		// Whether a folder is ignored is its children's too: they are
 		// read again, when it is open.
 		if ch.ignored != e.Ignored && ch.dir {
-			ch.loaded, ch.children = false, nil
+			ch.loaded, ch.read, ch.children = false, false, nil
 		}
 		ch.ignored = e.Ignored
 		n.children[i] = ch

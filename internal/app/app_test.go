@@ -664,3 +664,43 @@ func TestSelectOpenedFile(t *testing.T) {
 		t.Error("button shown with no file open")
 	}
 }
+
+func TestTreeCompactsMiddleFolders(t *testing.T) {
+	_, tt := openSample(t)
+	prefs.CompactFolders = true
+	defer func() { prefs = defaultSettings }()
+	tt.Frame() // src is read by the first, and joins main in the next
+	// main holds java and resources, which ends the chain.
+	click(t, tt, "src/main", "java/com/example/demo")
+	if !tt.HasText("DemoApplication.java") || !tt.HasText("java/com/example/demo") {
+		t.Error("java/com/example/demo not one row")
+	}
+	prefs.CompactFolders = false
+	tt.Frame()
+	if tt.HasText("java/com/example/demo") {
+		t.Error("folders still compacted when the setting is off")
+	}
+}
+
+// A read that answers later must not make the reveal think a folder gone.
+func TestRevealWaitsForReads(t *testing.T) {
+	a := newApp(defaultState)
+	var jobs []func()
+	a.host.Run = func(job func() func()) { apply := job(); jobs = append(jobs, apply) }
+	a.OpenProject(sampleProject(t))
+	tt := ui.NewTester(a.View, 1280, 800)
+	rel := "src/main/java/com/example/demo/DemoApplication.java"
+	a.revealInTree(rel)
+	for range 40 {
+		tt.Frame() // frames that fall between a read and its answer
+		if len(jobs) == 0 {
+			break
+		}
+		jobs[0]()
+		jobs = jobs[1:]
+	}
+	tt.Frame()
+	if a.revealing != "" || !tt.HasText("DemoApplication.java") {
+		t.Errorf("revealing %q, file shown %v", a.revealing, tt.HasText("DemoApplication.java"))
+	}
+}

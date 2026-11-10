@@ -56,6 +56,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	dataDir = dir
+	// The tests click the sample's folders one at a time.
+	defaultSettings.CompactFolders = false
+	prefs = defaultSettings
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

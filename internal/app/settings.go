@@ -29,12 +29,15 @@ type Settings struct {
 	// width.
 	InlineBlame bool `json:"inlineBlame"`
 	GutterBlame bool `json:"gutterBlame"`
+	// CompactFolders shows a chain of folders each holding only the next as
+	// one row in the project tree, as IntelliJ does its middle packages.
+	CompactFolders bool `json:"compactFolders"`
 	// Keymap holds the shortcuts the user rebound, by keymap.Action ID;
 	// an action not in it keeps its default.
 	Keymap map[string]string `json:"keymap,omitempty"`
 }
 
-var defaultSettings = Settings{EditorLineHeight: 1.5, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: false, GutterBlame: false}
+var defaultSettings = Settings{EditorLineHeight: 1.5, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: false, GutterBlame: false, CompactFolders: true}
 
 var prefs = defaultSettings
 
