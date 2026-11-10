@@ -1,3 +1,7 @@
+// Command megafactory is the app's composition root: it reads the user's
+// settings and window state, opens the window, and gives the app the
+// window and the desktop it asks for. Everything the app does lives in
+// internal/app, which runs without either, as the tests want.
 package main
 
 import (
@@ -5,13 +9,12 @@ import (
 	"errors"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"path"
 	"time"
 
+	"megafactory/internal/app"
 	"megafactory/internal/runner"
-	"megafactory/internal/setup"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/terminal"
@@ -19,18 +22,13 @@ import (
 )
 
 func main() {
-	registerFonts()
-	loadGhostty()
-	prefs = loadSettings()
-	themes = themeNamed(prefs.Theme)
+	app.RegisterFonts()
+	app.LoadGhostty()
+	prefs := app.LoadSettings()
 	// Before Run, so the window opens in it.
-	mygo.Theme.SetSource(mygo.ThemeSource(prefs.Appearance))
-	st := loadState()
-	a := newApp(st)
-	a.recent = loadRecent()
-	a.servers = servers{artifacts: setup.Artifacts, client: http.DefaultClient}
-	// newApp starts none, as tests want: the app's starts jdtls.
-	a.java.starter = startLanguageServer(a)
+	setAppearance(prefs.Appearance)
+	st := app.LoadState()
+	a := app.New(st, prefs)
 	mygo.App.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     "megafactory",
@@ -44,21 +42,20 @@ func main() {
 			TitleBarStyle:        mygo.TitleBarHidden,
 			TrafficLightPosition: &mygo.Point{X: 16, Y: 15},
 			BackgroundColor:      "light-dark(#e3e7ef, #1e2229)",
-			Content:              ui.View(a.view),
+			Content:              ui.View(a.View),
 		})
-		a.host = windowHost(win)
-		a.host.javaJDK = a.javaJDK
+		a.UseHost(windowHost(win))
 		mygo.App.SetMenu(appMenu(a, win))
 		closing := false
 		win.OnClose(func(e *mygo.CloseEvent) {
-			if !closing && a.beforeCloseWindow(func() { closing = true; win.Close() }) {
+			if !closing && a.BeforeCloseWindow(func() { closing = true; win.Close() }) {
 				e.PreventDefault()
 			}
 		})
-		win.OnClosed(func() { saveState(a.state()) })
+		win.OnClosed(func() { app.SaveState(a.State()) })
 		// A project moved or deleted since opens as none.
 		if fi, err := os.Stat(st.Project); err == nil && fi.IsDir() {
-			a.openProject(st.Project)
+			a.OpenProject(st.Project)
 		}
 	})
 	if err := mygo.App.Run(); err != nil {
@@ -66,21 +63,23 @@ func main() {
 	}
 }
 
+func setAppearance(source string) { mygo.Theme.SetSource(mygo.ThemeSource(source)) }
+
 // appMenu is macOS's default menu bar, whose File menu closes the tab
 // with ⌘W, as editors do, and the window with ⌘⇧W.
-func appMenu(a *app, win *mygo.Window) *mygo.Menu {
+func appMenu(a *app.App, win *mygo.Window) *mygo.Menu {
 	do := func(fn func()) func(*mygo.MenuItem, *mygo.Window) {
 		return func(*mygo.MenuItem, *mygo.Window) { win.Update(fn) }
 	}
 	return mygo.NewMenu([]*mygo.MenuItem{
 		{Role: mygo.RoleAppMenu},
 		{Label: "File", Submenu: []*mygo.MenuItem{
-			{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: do(a.openFolder)},
-			{Label: "Recent Projects…", Accelerator: "CmdOrCtrl+Shift+O", Click: do(a.openRecentPalette)},
+			{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: do(a.OpenFolder)},
+			{Label: "Recent Projects…", Accelerator: "CmdOrCtrl+Shift+O", Click: do(a.OpenRecentPalette)},
 			mygo.Separator(),
-			{Label: "Save", Accelerator: "CmdOrCtrl+S", Click: do(a.saveActive)},
+			{Label: "Save", Accelerator: "CmdOrCtrl+S", Click: do(a.SaveActive)},
 			mygo.Separator(),
-			{Label: "Close Tab", Accelerator: "CmdOrCtrl+W", Click: do(a.closeActive)},
+			{Label: "Close Tab", Accelerator: "CmdOrCtrl+W", Click: do(a.CloseActive)},
 			{Label: "Close Window", Accelerator: "CmdOrCtrl+Shift+W", Click: do(win.Close)},
 		}},
 		{Role: mygo.RoleEditMenu},
@@ -89,16 +88,17 @@ func appMenu(a *app, win *mygo.Window) *mygo.Menu {
 	})
 }
 
-func windowHost(win *mygo.Window) host {
-	return host{
-		run: func(job func() func()) {
+// windowHost is the app's host as this window serves it.
+func windowHost(win *mygo.Window) app.Host {
+	return app.Host{
+		Run: func(job func() func()) {
 			go func() { win.Update(job()) }()
 		},
-		update: win.Update,
-		after: func(d time.Duration, fn func()) {
+		Update: win.Update,
+		After: func(d time.Duration, fn func()) {
 			time.AfterFunc(d, func() { win.Update(fn) })
 		},
-		pickFolder: func(done func(string)) {
+		PickFolder: func(done func(string)) {
 			// Dialog.Open waits for the user, so not on the UI thread.
 			go func() {
 				paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: win, Directory: true, CreateDirectories: true, ButtonLabel: "Open"})
@@ -110,17 +110,17 @@ func windowHost(win *mygo.Window) host {
 				}
 			}()
 		},
-		setAppearance: func(source string) { mygo.Theme.SetSource(mygo.ThemeSource(source)) },
-		trash:         mygo.Shell.TrashItem,
-		reveal:        mygo.Shell.ShowItemInFolder,
-		ask: func(q question, done func(int)) {
+		SetAppearance: setAppearance,
+		Trash:         mygo.Shell.TrashItem,
+		Reveal:        mygo.Shell.ShowItemInFolder,
+		Ask: func(q app.Question, done func(int)) {
 			go func() {
 				opts := mygo.MessageOptions{
-					Parent: win, Type: mygo.MessageWarning, Message: q.message, Detail: q.detail,
-					Buttons: q.buttons, DefaultButton: 0, CancelButton: len(q.buttons) - 1,
+					Parent: win, Type: mygo.MessageWarning, Message: q.Message, Detail: q.Detail,
+					Buttons: q.Buttons, DefaultButton: 0, CancelButton: len(q.Buttons) - 1,
 				}
-				if q.destructive >= 0 {
-					opts.DestructiveButtons = []int{q.destructive}
+				if q.Destructive >= 0 {
+					opts.DestructiveButtons = []int{q.Destructive}
 				}
 				r, err := mygo.Dialog.Message(opts)
 				if err == nil && r.Button >= 0 {
@@ -128,23 +128,23 @@ func windowHost(win *mygo.Window) host {
 				}
 			}()
 		},
-		closeWindow: win.Close,
-		showError: func(title, message string) {
+		CloseWindow: win.Close,
+		ShowError: func(title, message string) {
 			go mygo.Dialog.Message(mygo.MessageOptions{Parent: win, Type: mygo.MessageError, Message: title, Detail: message})
 		},
-		watch: func(root string, changed func([]string)) func() {
+		Watch: func(root string, changed func([]string)) func() {
 			ctx, stop := context.WithCancel(context.Background())
 			go watchProject(ctx, win, root, changed)
 			return stop
 		},
-		newTerm: func(opts terminal.Options) (termHandle, error) {
+		NewTerm: func(opts terminal.Options) (app.TermHandle, error) {
 			t, err := terminal.New(opts)
 			if err != nil {
 				return nil, err
 			}
-			return liveTerm{t}, nil
+			return app.LiveTerm{T: t}, nil
 		},
-		startProc: runner.Start,
+		StartProc: runner.Start,
 	}
 }
 
