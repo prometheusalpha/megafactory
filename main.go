@@ -46,6 +46,7 @@ func main() {
 		})
 		a.UseHost(windowHost(win))
 		mygo.App.SetMenu(appMenu(a, win))
+		a.OnKeymapChange(func() { mygo.App.SetMenu(appMenu(a, win)) })
 		closing := false
 		win.OnClose(func(e *mygo.CloseEvent) {
 			if !closing && a.BeforeCloseWindow(func() { closing = true; win.Close() }) {
@@ -65,22 +66,33 @@ func main() {
 
 func setAppearance(source string) { mygo.Theme.SetSource(mygo.ThemeSource(source)) }
 
-// appMenu is macOS's default menu bar, whose File menu closes the tab
-// with ⌘W, as editors do, and the window with ⌘⇧W.
+// appMenu is macOS's default menu bar. Its File menu holds the keys of
+// closing tabs, which it takes before the window's shortcuts do; they are
+// the keymap's, so the menu is built again as one is rebound. Close Window
+// has no key: ⌘⇧W closes the other tabs.
 func appMenu(a *app.App, win *mygo.Window) *mygo.Menu {
 	do := func(fn func()) func(*mygo.MenuItem, *mygo.Window) {
 		return func(*mygo.MenuItem, *mygo.Window) { win.Update(fn) }
 	}
+	// Its keys are held back while the settings page waits for a key, or
+	// the menu would take the one pressed.
+	key := func(accel string) string {
+		if a.Recording() {
+			return ""
+		}
+		return accel
+	}
 	return mygo.NewMenu([]*mygo.MenuItem{
 		{Role: mygo.RoleAppMenu},
 		{Label: "File", Submenu: []*mygo.MenuItem{
-			{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: do(a.OpenFolder)},
-			{Label: "Recent Projects…", Accelerator: "CmdOrCtrl+Shift+O", Click: do(a.OpenRecentPalette)},
+			{Label: "Open Folder…", Accelerator: key("CmdOrCtrl+O"), Click: do(a.OpenFolder)},
+			{Label: "Recent Projects…", Accelerator: key("CmdOrCtrl+Shift+O"), Click: do(a.OpenRecentPalette)},
 			mygo.Separator(),
-			{Label: "Save", Accelerator: "CmdOrCtrl+S", Click: do(a.SaveActive)},
+			{Label: "Save", Accelerator: key("CmdOrCtrl+S"), Click: do(a.SaveActive)},
 			mygo.Separator(),
-			{Label: "Close Tab", Accelerator: "CmdOrCtrl+W", Click: do(a.CloseActive)},
-			{Label: "Close Window", Accelerator: "CmdOrCtrl+Shift+W", Click: do(win.Close)},
+			{Label: "Close Tab", Accelerator: key(a.Keymap().Binding("closeTab").Accelerator()), Click: do(a.CloseActive)},
+			{Label: "Close Other Tabs", Accelerator: key(a.Keymap().Binding("closeOtherTabs").Accelerator()), Click: do(a.CloseOtherTabs)},
+			{Label: "Close Window", Click: do(win.Close)},
 		}},
 		{Role: mygo.RoleEditMenu},
 		{Role: mygo.RoleViewMenu},

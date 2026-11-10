@@ -40,6 +40,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 					a.applyBlameSettings()
 				}
 			})
+			a.keymapSection(c, k)
 		})
 	})
 }

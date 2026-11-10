@@ -63,6 +63,23 @@ func (a *App) CloseActive() {
 	a.requestClose(a.tabs[a.active])
 }
 
+func (a *App) CloseOtherTabs() {
+	if len(a.tabs) > 1 {
+		a.closeOthers(a.tabs[a.active])
+	}
+}
+
+func (a *App) closeOthers(keep *tab) {
+	a.closeTabs(slices.DeleteFunc(slices.Clone(a.tabs), func(o *tab) bool { return o == keep }))
+}
+
+// stepTab activates the tab delta places along, wrapping round the ends.
+func (a *App) stepTab(delta int) {
+	if n := len(a.tabs); n > 1 {
+		a.active = (a.active + delta%n + n) % n
+	}
+}
+
 // requestClose closes a tab, asking first to save its changes.
 func (a *App) requestClose(t *tab) {
 	if t.ed == nil || !t.ed.Buffer.Modified() {
@@ -156,11 +173,11 @@ func (a *App) askToSave(ts []*tab, proceed func()) (asked bool) {
 // tabMenu is a tab's context menu, as IntelliJ's.
 func (a *App) tabMenu(svc ui.Services, m *ui.Menu, t *tab) {
 	i := slices.Index(a.tabs, t)
-	if m.Item("Close").Shortcut(ui.Cmd, ui.KeyW).Chosen() {
+	if a.shortcutOf(m.Item("Close"), "closeTab").Chosen() {
 		a.requestClose(t)
 	}
-	if m.Item("Close Others").Disabled(len(a.tabs) < 2).Chosen() {
-		a.closeTabs(slices.DeleteFunc(slices.Clone(a.tabs), func(o *tab) bool { return o == t }))
+	if a.shortcutOf(m.Item("Close Others"), "closeOtherTabs").Disabled(len(a.tabs) < 2).Chosen() {
+		a.closeOthers(t)
 	}
 	if m.Item("Close to the Right").Disabled(i == len(a.tabs)-1).Chosen() {
 		a.closeTabs(slices.Clone(a.tabs[i+1:]))

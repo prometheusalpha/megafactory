@@ -13,6 +13,7 @@ import (
 
 	"megafactory/internal/javalang"
 	"megafactory/internal/jdk"
+	"megafactory/internal/keymap"
 	"megafactory/internal/runcfg"
 	"megafactory/internal/runner"
 	"megafactory/internal/setup"
@@ -145,6 +146,12 @@ type App struct {
 	palette *recentPalette
 	files   *filePalette
 
+	// keys is the shortcuts of keymap.Actions; keysChanged tells the
+	// window, whose menu bar shows some, that one was rebound.
+	keys        *keymap.Keymap
+	keysChanged func()
+	recording   *recording
+
 	servers servers
 
 	// java is the language server of the project, and builds the Build
@@ -183,6 +190,8 @@ func newApp(st State) *App {
 				return j, nil, err
 			},
 		},
+		keys:        keymap.New(prefs.Keymap),
+		keysChanged: func() {},
 		runStore:    mustEmptyStore(),
 		branch:      "main",
 		focus:       focusEditor,
@@ -238,15 +247,17 @@ func (a *App) View(c *ui.Context) {
 	a.javaFrame()
 	a.gitFrame()
 	a.debugFrame()
-	c.OnShortcut(ui.Cmd, ui.KeyB, func() { a.showSidebar = !a.showSidebar })
-	c.OnShortcut(ui.Cmd, ui.KeyJ, func() { a.showBottom = !a.showBottom })
-	c.OnShortcut(ui.Cmd, ui.KeyO, a.OpenFolder)
-	c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyO, a.OpenRecentPalette)
-	c.OnShortcut(ui.Cmd, ui.KeyP, a.OpenFilePalette)
-	c.OnShortcut(ui.Cmd, ui.KeyComma, a.openSettings)
-	// On macOS the File menu takes these first, and does the same.
-	c.OnShortcut(ui.Cmd, ui.KeyS, a.SaveActive)
-	c.OnShortcut(ui.Cmd, ui.KeyW, a.CloseActive)
+	// While the settings page waits for a key, none is a shortcut.
+	if !a.Recording() {
+		c.OnShortcut(ui.Cmd, ui.KeyB, func() { a.showSidebar = !a.showSidebar })
+		c.OnShortcut(ui.Cmd, ui.KeyJ, func() { a.showBottom = !a.showBottom })
+		c.OnShortcut(ui.Cmd, ui.KeyO, a.OpenFolder)
+		c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyO, a.OpenRecentPalette)
+		c.OnShortcut(ui.Cmd, ui.KeyComma, a.openSettings)
+		// On macOS the File menu takes these first, and does the same.
+		c.OnShortcut(ui.Cmd, ui.KeyS, a.SaveActive)
+		a.keyShortcuts(c)
+	}
 	k := colorsOf(c)
 	c.Root().Background(k.bgBottom)
 	ui.Column(c).Fill().Draw(func(p *ui.Painter, r ui.Rect) { paintBackground(p, r, k) }).Children(func() {

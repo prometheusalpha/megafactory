@@ -29,6 +29,9 @@ type Settings struct {
 	// width.
 	InlineBlame bool `json:"inlineBlame"`
 	GutterBlame bool `json:"gutterBlame"`
+	// Keymap holds the shortcuts the user rebound, by keymap.Action ID;
+	// an action not in it keeps its default.
+	Keymap map[string]string `json:"keymap,omitempty"`
 }
 
 var defaultSettings = Settings{EditorLineHeight: 1.5, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: false, GutterBlame: false}

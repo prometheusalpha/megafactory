@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -105,7 +106,7 @@ func TestSettingsChangeTheme(t *testing.T) {
 	if source != "dark" || prefs.Appearance != "dark" {
 		t.Errorf("appearance %q, source %q", prefs.Appearance, source)
 	}
-	if got := LoadSettings(); got != prefs {
+	if got := LoadSettings(); !reflect.DeepEqual(got, prefs) {
 		t.Errorf("kept %+v, want %+v", got, prefs)
 	}
 	click(t, tt, "Default")
