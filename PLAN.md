@@ -21,7 +21,9 @@ Java IDE native viết bằng Go trên MyGo (`github.com/egoist/mygo` v0.8.3, na
 ## Kiến trúc
 
 ```
-main.go               app shell: sidebar | tabs+editor | bottom panel (Run/Debug/Terminal/Git)
+main.go               composition root: đọc settings + state, mở window, đưa app cái window và desktop nó cần; watch fs
+internal/app/         cả app: sidebar | tabs+editor | bottom panel (Run/Debug/Terminal/Git), tree, git, java, run, settings, theme
+internal/app/assets/  icons, fonts, theme .conf (embed theo package)
 internal/workspace/   fs tree, file ops, fs watch
 internal/lsp/         JSON-RPC stdio client → jdtls
 internal/tabs/        documents: editor.Buffer + editor.State per file, dirty/save
