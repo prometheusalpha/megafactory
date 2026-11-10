@@ -73,6 +73,9 @@ func (a *App) closeOthers(keep *tab) {
 	a.closeTabs(slices.DeleteFunc(slices.Clone(a.tabs), func(o *tab) bool { return o == keep }))
 }
 
+func (a *App) NextTab() { a.stepTab(1) }
+func (a *App) PrevTab() { a.stepTab(-1) }
+
 // stepTab activates the tab delta places along, wrapping round the ends.
 func (a *App) stepTab(delta int) {
 	if n := len(a.tabs); n > 1 {

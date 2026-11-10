@@ -12,8 +12,8 @@ func (a *App) keyActions() map[string]func() {
 	return map[string]func(){
 		"closeTab":       a.CloseActive,
 		"closeOtherTabs": a.CloseOtherTabs,
-		"nextTab":        func() { a.stepTab(1) },
-		"prevTab":        func() { a.stepTab(-1) },
+		"nextTab":        a.NextTab,
+		"prevTab":        a.PrevTab,
 		"findFile":       a.OpenFilePalette,
 		"findInFiles":    a.OpenFindInFiles,
 	}

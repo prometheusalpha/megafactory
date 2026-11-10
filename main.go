@@ -82,6 +82,11 @@ func appMenu(a *app.App, win *mygo.Window) *mygo.Menu {
 		}
 		return accel
 	}
+	// An action's item, with the key the keymap gives it. On macOS a key
+	// such as ⌃Tab reaches the app only as a menu's key equivalent.
+	item := func(label, id string, fn func()) *mygo.MenuItem {
+		return &mygo.MenuItem{Label: label, Accelerator: key(a.Keymap().Binding(id).Accelerator()), Click: do(fn)}
+	}
 	return mygo.NewMenu([]*mygo.MenuItem{
 		{Role: mygo.RoleAppMenu},
 		{Label: "File", Submenu: []*mygo.MenuItem{
@@ -90,11 +95,18 @@ func appMenu(a *app.App, win *mygo.Window) *mygo.Menu {
 			mygo.Separator(),
 			{Label: "Save", Accelerator: key("CmdOrCtrl+S"), Click: do(a.SaveActive)},
 			mygo.Separator(),
-			{Label: "Close Tab", Accelerator: key(a.Keymap().Binding("closeTab").Accelerator()), Click: do(a.CloseActive)},
-			{Label: "Close Other Tabs", Accelerator: key(a.Keymap().Binding("closeOtherTabs").Accelerator()), Click: do(a.CloseOtherTabs)},
+			item("Close Tab", "closeTab", a.CloseActive),
+			item("Close Other Tabs", "closeOtherTabs", a.CloseOtherTabs),
 			{Label: "Close Window", Click: do(win.Close)},
 		}},
 		{Role: mygo.RoleEditMenu},
+		{Label: "Go", Submenu: []*mygo.MenuItem{
+			item("Go to File…", "findFile", a.OpenFilePalette),
+			item("Find in Files…", "findInFiles", a.OpenFindInFiles),
+			mygo.Separator(),
+			item("Show Next Tab", "nextTab", a.NextTab),
+			item("Show Previous Tab", "prevTab", a.PrevTab),
+		}},
 		{Role: mygo.RoleViewMenu},
 		{Role: mygo.RoleWindowMenu},
 	})
