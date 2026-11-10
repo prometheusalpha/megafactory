@@ -717,10 +717,12 @@ func (a *App) editorCard(c *ui.Context, k *colors) ui.Element {
 			if at.n > 0 {
 				start := cur.ed.Buffer.Offset(editor.Pos{Line: at.line, Col: at.col})
 				cur.ed.Select(start, start+at.n)
+				cur.ed.ScrollTo(at.line)
 			} else {
+				// GoTo already scrolls the line to the middle; a ScrollTo
+				// after it would pull the line up to the top.
 				cur.ed.GoTo(editor.Pos{Line: at.line})
 			}
-			cur.ed.ScrollTo(at.line)
 		}
 	})
 	return e
