@@ -742,12 +742,7 @@ func (a *App) editorCard(c *ui.Context, k *colors) ui.Element {
 			a.settingsPage(c, k)
 			return
 		}
-		_, th, _ := themes.pick(c.Theme().Dark)
-		if th == nil {
-			th = editor.DefaultTheme(c.Theme())
-			th.Background = k.editor
-		}
-		cur.ed.Theme = th
+		cur.ed.Theme = activeEditorTheme(c, k)
 		cur.ed.Font, cur.ed.LineHeight = code.editorFont(), prefs.EditorLineHeight
 		// The server answers a Java file's completions, hovers and
 		// definitions; the editor asks through these.
@@ -902,4 +897,15 @@ func placeholder(c *ui.Context, k *colors, s string) {
 	ui.Column(c).Grow(1).Center().Padding(16).Children(func() {
 		ui.Text(c, s).FontSize(12.5).TextColor(k.textMuted)
 	})
+}
+
+// activeEditorTheme is the theme the editors take: the picked one, else the
+// default's for the window's colors.
+func activeEditorTheme(c *ui.Context, k *colors) *editor.Theme {
+	_, th, _ := themes.pick(c.Theme().Dark)
+	if th == nil {
+		th = editor.DefaultTheme(c.Theme())
+		th.Background = k.editor
+	}
+	return th
 }

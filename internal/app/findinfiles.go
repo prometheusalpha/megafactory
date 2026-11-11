@@ -30,6 +30,7 @@ type findInFiles struct {
 	running bool
 	res     search.Result
 	err     error
+	preview findPreview
 }
 
 func (a *App) OpenFindInFiles() {
@@ -109,6 +110,7 @@ func (a *App) findInFilesView(c *ui.Context, k *colors) {
 	a.runFind(p)
 	ms := p.res.Matches
 	p.sel = min(max(p.sel, 0), max(len(ms)-1, 0))
+	a.syncPreview(p, ms)
 	choose := func(m search.Found) {
 		a.findIn = nil
 		if p.cancel != nil {
@@ -118,7 +120,7 @@ func (a *App) findInFilesView(c *ui.Context, k *colors) {
 	}
 	ui.DialogBase(c.Key("find-in-files"), &p.open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(0, 0, 0, 0.18))
-		panel.Width(760).MaxHeight(520).Padding(6).Gap(4).Radius(14).Background(k.panel).Border(1, k.panelBorder).
+		panel.Width(760).MaxHeight(680).Padding(6).Gap(4).Radius(14).Background(k.panel).Border(1, k.panelBorder).
 			Shadow(0, 12, 40, 0, k.shadowFocused).Label("Find in Files")
 		panel.Children(func() {
 			ui.Row(c).Height(36).Padding(0, 10).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -151,6 +153,7 @@ func (a *App) findInFilesView(c *ui.Context, k *colors) {
 					a.findRow(c, k, p, i, m, choose)
 				}
 			})
+			a.previewPane(c, k, p)
 		})
 	})
 	if !p.open {

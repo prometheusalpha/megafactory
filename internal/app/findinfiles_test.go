@@ -64,3 +64,23 @@ func TestFindInFilesTakesTheSelection(t *testing.T) {
 		t.Errorf("query %v, want %q", a.findIn, want)
 	}
 }
+
+func TestFindInFilesPreviewsTheSelectedMatch(t *testing.T) {
+	a, tt := openFind(t)
+	tt.Type("springapplication.run")
+	tt.Frame()
+	tt.Frame()
+	pv := a.findIn.preview
+	if pv.ed == nil || pv.path != "src/main/java/com/example/demo/DemoApplication.java" {
+		t.Fatalf("preview of %q", pv.path)
+	}
+	if !pv.ed.ReadOnly {
+		t.Error("the preview is editable")
+	}
+	if got := pv.ed.SelectedText(); got != "SpringApplication.run" {
+		t.Errorf("preview selects %q", got)
+	}
+	if len(a.tabs) != 0 {
+		t.Errorf("previewing opened a tab: %d tabs", len(a.tabs))
+	}
+}
