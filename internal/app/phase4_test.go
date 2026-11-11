@@ -411,3 +411,39 @@ func TestLateTerminalSpawnDoesNotJoinNewProject(t *testing.T) {
 		t.Errorf("a terminal of the old project joined the new one: %v", a.terms)
 	}
 }
+
+// The dialog opens on a config's form, and an unsaved edit survives a trip
+// to another config.
+func TestRunConfigDialogOpensOnFormAndKeepsDraft(t *testing.T) {
+	a, tt, _ := phase4App(t)
+	one, _ := a.runStore.Upsert(runcfg.Config{Name: "One", Kind: runcfg.Shell, Command: "echo 1"})
+	two, _ := a.runStore.Upsert(runcfg.Config{Name: "Two", Kind: runcfg.Shell, Command: "echo 2"})
+	a.editConfigurations()
+	tt.Frame()
+	if !a.runEdit.editing || a.runEdit.sel != one.ID {
+		t.Fatalf("opened on sel %q editing %v, want %q editing", a.runEdit.sel, a.runEdit.editing, one.ID)
+	}
+	a.runEdit.draft.Command = "echo edited"
+	a.pickRunConfig(a.runEdit, two.ID)
+	if a.runEdit.draft.Command != "echo 2" {
+		t.Errorf("second config shows %q", a.runEdit.draft.Command)
+	}
+	a.pickRunConfig(a.runEdit, one.ID)
+	if a.runEdit.draft.Command != "echo edited" {
+		t.Errorf("unsaved edit lost: %q", a.runEdit.draft.Command)
+	}
+}
+
+// Cancel drops the unsaved edit and shows the stored config again.
+func TestRunConfigCancelRevertsDraft(t *testing.T) {
+	a, tt, _ := phase4App(t)
+	a.runStore.Upsert(runcfg.Config{Name: "One", Kind: runcfg.Shell, Command: "echo 1"})
+	a.editConfigurations()
+	tt.Frame()
+	a.runEdit.draft.Command = "echo edited"
+	click(t, tt, "Cancel")
+	tt.Frame()
+	if a.runEdit.draft.Command != "echo 1" {
+		t.Errorf("draft after Cancel %q", a.runEdit.draft.Command)
+	}
+}

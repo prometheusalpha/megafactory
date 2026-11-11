@@ -28,6 +28,43 @@ type runEditState struct {
 	editing bool
 	adding  bool
 	err     string
+	// stashed keeps the unsaved draft of a config the user switched away
+	// from, so moving between configs does not cost them their edits.
+	stashed map[string]runcfg.Config
+	// envRows are the Environment table's rows, and envSrc the draft text
+	// they were last made from or written to.
+	envRows []runcfg.EnvVar
+	envSrc  string
+	// envText is the form's one-line input; envTextSrc the draft text it
+	// was last made from. envOpen is the table modal.
+	envText    string
+	envTextSrc string
+	envOpen    bool
+}
+
+// stash parks the draft under its config, unless it is a new one: that has
+// no id yet and is dropped when the user leaves it.
+func (e *runEditState) stash() {
+	if !e.editing || e.sel == "" {
+		return
+	}
+	if e.stashed == nil {
+		e.stashed = map[string]runcfg.Config{}
+	}
+	e.stashed[e.sel] = e.draft
+}
+
+// pickRunConfig shows a config's form: its stashed draft when it has one,
+// else the stored config.
+func (a *App) pickRunConfig(e *runEditState, id string) {
+	e.stash()
+	e.sel, e.adding, e.err = id, false, ""
+	if d, ok := e.stashed[id]; ok {
+		e.draft, e.editing = d, true
+		return
+	}
+	cfg, ok := a.runStore.ByID(id)
+	e.draft, e.editing = cfg, ok
 }
 
 func (a *App) runPath() string {
@@ -257,6 +294,15 @@ func (a *App) runMain(rel, fqcn string, spring bool) {
 
 func (a *App) editConfigurations() {
 	a.runEdit = &runEditState{open: true}
+	// The form opens on the selected config, or the first one.
+	first := a.runConfig
+	if _, ok := a.runStore.ByID(first); !ok {
+		first = ""
+		if all := a.runStore.All(); len(all) > 0 {
+			first = all[0].ID
+		}
+	}
+	a.pickRunConfig(a.runEdit, first)
 	a.loadMainClasses()
 }
 
@@ -311,6 +357,7 @@ func (a *App) runConfigsDialog(c *ui.Context, k *colors) {
 				a.runConfigForm(c, k, e)
 			})
 			a.runEditFooter(c, k, e)
+			a.runEnvDialog(c, k, e)
 		})
 	})
 	if !e.open {
@@ -329,11 +376,14 @@ func (a *App) runEditFooter(c *ui.Context, k *colors, e *runEditState) {
 		if !e.editing {
 			return
 		}
-		if ui.Button(c, "Save").Clicked() {
+		if textButton(c, k, "Save").Clicked() {
 			a.saveRunDraft(e)
 		}
-		if ui.Button(c, "Cancel").Clicked() {
-			e.editing, e.err = false, ""
+		if textButton(c, k, "Cancel").Clicked() {
+			// Not editing, or pickRunConfig would stash the very draft being dropped.
+			e.editing = false
+			delete(e.stashed, e.sel)
+			a.pickRunConfig(e, e.sel)
 		}
 	})
 }
@@ -346,7 +396,8 @@ func (a *App) saveRunDraft(e *runEditState) {
 		e.err = err.Error()
 		return
 	}
-	e.sel, e.editing, e.err = cfg.ID, false, ""
+	delete(e.stashed, cfg.ID)
+	e.sel, e.draft, e.editing, e.err = cfg.ID, cfg, true, ""
 	if a.runConfig == "" {
 		a.selectRunConfig(cfg.ID)
 	} else {
@@ -371,22 +422,25 @@ func (a *App) runConfigList(c *ui.Context, k *colors, e *runEditState) {
 					ui.Icon(c, icon("play")).Size(12, 12).TextColor(k.iconMuted)
 					ui.Text(c, cfg.Name).FontSize(12.5).TextColor(k.text).SingleLine()
 				})
-				row.OnClick(func() { e.sel, e.editing, e.adding, e.err = cfg.ID, false, false, "" })
+				row.OnClick(func() { a.pickRunConfig(e, cfg.ID) })
 			}
 		})
 		ui.Row(c).Gap(4).Children(func() {
-			if ui.Button(c, "Add").Clicked() {
-				e.adding, e.editing, e.err = true, false, ""
+			if textButton(c, k, "Add").Clicked() {
+				e.stash()
+				e.sel, e.adding, e.editing, e.err = "", true, false, ""
 			}
-			if ui.Button(c, "Duplicate").Clicked() && e.sel != "" {
+			if textButton(c, k, "Duplicate").Clicked() && e.sel != "" {
 				if _, err := a.runStore.Duplicate(e.sel); err == nil {
 					a.saveRunConfigs()
 				}
 			}
-			if ui.Button(c, "Delete").Clicked() && e.sel != "" {
+			if textButton(c, k, "Delete").Clicked() && e.sel != "" {
 				a.runStore.Delete(e.sel)
+				delete(e.stashed, e.sel)
 				a.runConfig = a.runStore.Selected()
-				e.sel, e.editing, e.err = "", false, ""
+				e.editing = false
+				a.pickRunConfig(e, a.runConfig)
 				a.saveRunConfigs()
 			}
 		})
@@ -414,12 +468,11 @@ func (a *App) runConfigForm(c *ui.Context, k *colors, e *runEditState) {
 		case e.editing:
 			a.runConfigFields(c, k, e)
 		default:
-			if cfg, ok := a.runStore.ByID(e.sel); ok {
-				ui.Text(c, cfg.Name).FontSize(13).FontWeight(600).TextColor(k.text)
-				ui.Text(c, specFor(cfg.Kind).Label).FontSize(12).TextColor(k.textMuted)
-				if ui.Button(c, "Edit").Clicked() {
-					e.draft, e.editing, e.err = cfg, true, ""
-				}
+			if _, ok := a.runStore.ByID(e.sel); ok {
+				// Open with no form yet, e.g. the dialog was made around a
+				// selection: show it rather than ask for an Edit click.
+				a.pickRunConfig(e, e.sel)
+				a.runConfigFields(c, k, e)
 			} else {
 				ui.Text(c, "Select a configuration, or add one.").FontSize(12).TextColor(k.textMuted)
 			}
@@ -458,6 +511,8 @@ func (a *App) runConfigFields(c *ui.Context, k *colors, e *runEditState) {
 							item.Children(func() { ui.Text(c, m.MainClass).FontSize(12.5).TextColor(k.text).SingleLine() })
 						}
 					})
+				case f.Env:
+					a.runEnvField(c, k, e)
 				case f.Multi:
 					fieldLook(k, ui.TextAreaBase(c, f.Ptr(&e.draft)).Label(f.Label).FontSize(12.5).TextColor(k.text).
 						Height(56).FillWidth().Padding(6, 8))

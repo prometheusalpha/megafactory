@@ -209,3 +209,18 @@ func fileIcon(name string) string {
 	}
 	return "file"
 }
+
+// textButton is a quiet capsule button in the theme's own colors: ui.Button
+// carries the toolkit's palette, which clashes inside the app's dialogs.
+func textButton(c *ui.Context, k *colors, label string) ui.Element {
+	b := ui.Row(c).Height(24).Padding(0, 10).AlignItems(ui.Center).Radius(7).
+		Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label)
+	if b.Pressed() {
+		b.Background(k.pressed)
+	} else if b.Hovered() {
+		b.Background(k.hover)
+	}
+	b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
+	b.Children(func() { ui.Text(c, label).FontSize(12).TextColor(k.text) })
+	return b
+}
