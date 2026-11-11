@@ -259,7 +259,6 @@ func (a *App) View(c *ui.Context) {
 	if !a.Recording() {
 		c.OnShortcut(ui.Cmd, ui.KeyB, func() { a.showSidebar = !a.showSidebar })
 		c.OnShortcut(ui.Cmd, ui.KeyJ, func() { a.showBottom = !a.showBottom })
-		c.OnShortcut(ui.Ctrl, ui.KeyBackquote, func() { a.showBottom = !a.showBottom })
 		c.OnShortcut(ui.Cmd, ui.KeyO, a.OpenFolder)
 		c.OnShortcut(ui.Cmd, ui.KeyComma, a.openSettings)
 		// On macOS the File menu takes these first, and does the same.

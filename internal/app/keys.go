@@ -17,6 +17,7 @@ func (a *App) keyActions() map[string]func() {
 		"findFile":       a.OpenFilePalette,
 		"findInFiles":    a.OpenFindInFiles,
 		"recentProjects": a.OpenRecentPalette,
+		"togglePanel":    func() { a.showBottom = !a.showBottom },
 	}
 }
 

@@ -36,6 +36,7 @@ var Actions = []Action{
 	{"findFile", "Go to File", Binding{ui.Cmd, ui.KeyP}},
 	{"findInFiles", "Find in Files", Binding{ui.Cmd | ui.Shift, ui.KeyF}},
 	{"recentProjects", "Recent Projects", Binding{ui.Cmd | ui.Alt, ui.KeyR}},
+	{"togglePanel", "Toggle Bottom Panel", Binding{ui.Ctrl, ui.KeyBackquote}},
 }
 
 // Fixed are the shortcuts the app keeps as they are, which no action may
@@ -48,7 +49,6 @@ var Fixed = []struct {
 	{"Open Folder", Binding{ui.Cmd, ui.KeyO}},
 	{"Toggle Sidebar", Binding{ui.Cmd, ui.KeyB}},
 	{"Toggle Panel", Binding{ui.Cmd, ui.KeyJ}},
-	{"Toggle Panel (Terminal)", Binding{ui.Ctrl, ui.KeyBackquote}},
 	{"Settings", Binding{ui.Cmd, ui.KeyComma}},
 	{"Cut", Binding{ui.Cmd, ui.KeyX}},
 	{"Copy", Binding{ui.Cmd, ui.KeyC}},
