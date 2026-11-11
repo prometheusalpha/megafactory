@@ -24,9 +24,8 @@ type Settings struct {
 	// InlineErrors shows each problem's message at the end of its line,
 	// as an inlay, rather than in the hover alone.
 	InlineErrors bool `json:"inlineErrors"`
-	// InlineBlame and GutterBlame are off by default: the editor has one
-	// inlay list (shared with inline errors), and the gutter column costs
-	// width.
+	// InlineBlame is on by default, as it only annotates the caret's line.
+	// GutterBlame is off: its column costs width.
 	InlineBlame bool `json:"inlineBlame"`
 	GutterBlame bool `json:"gutterBlame"`
 	// CompactFolders shows a chain of folders each holding only the next as
@@ -37,7 +36,7 @@ type Settings struct {
 	Keymap map[string]string `json:"keymap,omitempty"`
 }
 
-var defaultSettings = Settings{EditorLineHeight: 1.5, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: false, GutterBlame: false, CompactFolders: true}
+var defaultSettings = Settings{EditorLineHeight: 1.5, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: true, GutterBlame: false, CompactFolders: true}
 
 var prefs = defaultSettings
 
