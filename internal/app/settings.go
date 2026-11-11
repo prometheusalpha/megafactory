@@ -13,10 +13,13 @@ import (
 // settings page changes them.
 type Settings struct {
 	// EditorLineHeight is the height of the editor's lines as a multiple
-	// of the font's size. Ghostty's adjust-cell-height sizes the
-	// terminal's rows alone: rows roomy enough for a terminal read too
-	// sparse as code.
+	// of the font's size. The terminal's rows have their own, as rows
+	// roomy enough for code read too sparse in a terminal.
 	EditorLineHeight float32 `json:"editorLineHeight"`
+	// TerminalLineHeight is the height of the terminal's rows as a
+	// multiple of the font's own. It replaces Ghostty's adjust-cell-height,
+	// which the user's config sets for their Ghostty's sake.
+	TerminalLineHeight float32 `json:"terminalLineHeight"`
 	// Appearance is "system", "light" or "dark", as mygo.ThemeSource.
 	Appearance string `json:"appearance"`
 	// Theme names one of themeChoices.
@@ -36,7 +39,7 @@ type Settings struct {
 	Keymap map[string]string `json:"keymap,omitempty"`
 }
 
-var defaultSettings = Settings{EditorLineHeight: 1.5, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: true, GutterBlame: false, CompactFolders: true}
+var defaultSettings = Settings{EditorLineHeight: 1.5, TerminalLineHeight: 1.2, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: true, GutterBlame: false, CompactFolders: true}
 
 var prefs = defaultSettings
 

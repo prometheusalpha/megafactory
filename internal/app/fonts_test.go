@@ -18,8 +18,8 @@ font-feature = +dlig
 adjust-cell-width = 4%
 `
 	f := parseGhostty(strings.NewReader(cfg), defaultCodeFont)
-	if f.size != 14 || f.cellHeight != (adjust{px: 14}) || f.cellWidth != (adjust{pct: 0.04}) {
-		t.Errorf("size %v, cell height %+v, cell width %+v", f.size, f.cellHeight, f.cellWidth)
+	if f.size != 14 || f.cellWidth != (adjust{pct: 0.04}) {
+		t.Errorf("size %v, cell width %+v", f.size, f.cellWidth)
 	}
 	if want := []string{"ss01", "ss02", "calt", "-liga", "+dlig"}; !slices.Equal(f.features, want) {
 		t.Errorf("features %q, want %q", f.features, want)
@@ -32,10 +32,7 @@ adjust-cell-width = 4%
 	if font := f.editorFont(); font.Features != "ss01, ss02, calt, liga=0, dlig" {
 		t.Errorf("editor features %q", font.Features)
 	}
-	if f.rowH <= 14 {
-		t.Errorf("row %v", f.rowH)
-	}
-	if tf := f.terminalFont(); tf.LineHeight <= 1 || tf.CellWidth != 1.04 || len(tf.Features) != 5 {
+	if tf := f.terminalFont(); tf.LineHeight != prefs.TerminalLineHeight || tf.CellWidth != 1.04 || len(tf.Features) != 5 {
 		t.Errorf("terminal font %+v", tf)
 	}
 }
