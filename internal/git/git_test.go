@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -343,5 +344,24 @@ func TestCheckout(t *testing.T) {
 	only := Ref{Name: "origin/onlyremote", Full: "refs/remotes/origin/onlyremote", Kind: RemoteBranch}
 	if err := repo.Checkout(only); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRecentBranches(t *testing.T) {
+	dir, repo := newTestRepo(t)
+	// Fresh repo: nothing was checked out yet.
+	if got, err := repo.RecentBranches(); err != nil || len(got) != 0 {
+		t.Fatalf("fresh repo: %q, %v", got, err)
+	}
+	gitCmd(t, dir, "checkout", "-q", "feature")
+	gitCmd(t, dir, "checkout", "-q", "main")
+	gitCmd(t, dir, "checkout", "-q", "feature")
+	got, err := repo.RecentBranches()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Newest first, each branch once.
+	if want := []string{"feature", "main"}; !slices.Equal(got, want) {
+		t.Errorf("RecentBranches = %q, want %q", got, want)
 	}
 }

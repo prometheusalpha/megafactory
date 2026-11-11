@@ -39,11 +39,10 @@ type codeFont struct {
 	size     float32
 	features []string // as Ghostty's font-feature: "ss01", "+ss01", "-calt", "cv05=2"
 	thicken  bool
-	// cellHeight and cellWidth are Ghostty's adjust-cell-height and
-	// adjust-cell-width.
-	cellHeight, cellWidth adjust
-
-	rowH float32 // the height of a terminal row, after cellHeight
+	// cellWidth is Ghostty's adjust-cell-width. Its adjust-cell-height is
+	// left out: the terminal's row height is the app's own setting,
+	// prefs.TerminalLineHeight.
+	cellWidth adjust
 }
 
 // adjust is a Ghostty adjust-* value: DIPs ("14") or a share ("20%").
@@ -51,9 +50,7 @@ type adjust struct {
 	px, pct float32
 }
 
-func (a adjust) apply(v float32) float32 { return v*(1+a.pct) + a.px }
-
-var defaultCodeFont = codeFont{size: 13, features: []string{"calt"}, cellHeight: adjust{pct: 0.14}}
+var defaultCodeFont = codeFont{size: 13, features: []string{"calt"}}
 
 // code is the code font of this run; loadCodeFont sets it.
 var code = defaultCodeFont
@@ -118,8 +115,6 @@ func parseGhostty(r io.Reader, f codeFont) codeFont {
 			}
 		case "font-thicken":
 			f.thicken = v == "true"
-		case "adjust-cell-height":
-			f.cellHeight = parseAdjust(v)
 		case "adjust-cell-width":
 			f.cellWidth = parseAdjust(v)
 		}
@@ -138,7 +133,7 @@ func parseAdjust(v string) adjust {
 
 // resolve matches the user's families to installed ones, as Ghostty
 // does: "JetBrains Mono Nerd Font" is the family "JetBrainsMono Nerd
-// Font". It then measures the line height the cells adjust.
+// Font".
 func (f *codeFont) resolve() {
 	known := map[string]string{}
 	for _, fam := range ui.FontFamilies() {
@@ -149,8 +144,6 @@ func (f *codeFont) resolve() {
 			f.families[i] = name
 		}
 	}
-	m := ui.Font{Family: f.family(), Size: f.size}.Metrics()
-	f.rowH = f.cellHeight.apply(m.Ascent + m.Descent + m.LineGap)
 }
 
 func squash(s string) string { return strings.ToLower(strings.ReplaceAll(s, " ", "")) }
@@ -160,7 +153,7 @@ func (f codeFont) family() string {
 }
 
 // editorFont is the font of the code editor. Its line height is the
-// editor's own setting (prefs.EditorLineHeight), not adjust-cell-height.
+// editor's own setting (prefs.EditorLineHeight).
 func (f codeFont) editorFont() ui.Font {
 	// Element.FontFeatures takes "calt=0" where Ghostty says "-calt".
 	features := make([]string, len(f.features))
@@ -175,16 +168,15 @@ func (f codeFont) editorFont() ui.Font {
 
 // terminalFont is the font of the terminal, which takes Ghostty's
 // features as they are, and its line height as a multiple of the font's
-// own. adjust-cell-width in DIPs is left out: the terminal sizes columns
+// own, from prefs.TerminalLineHeight. adjust-cell-width in DIPs is left out: the terminal sizes columns
 // as a multiple of the advance alone.
 func (f codeFont) terminalFont() terminal.Font {
-	m := ui.Font{Family: f.family(), Size: f.size}.Metrics()
 	return terminal.Font{
 		Family:     f.family(),
 		Size:       f.size,
 		Features:   f.features,
 		Thicken:    f.thicken,
-		LineHeight: f.rowH / (m.Ascent + m.Descent + m.LineGap),
+		LineHeight: prefs.TerminalLineHeight,
 		CellWidth:  1 + f.cellWidth.pct,
 	}
 }

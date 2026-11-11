@@ -207,7 +207,29 @@ func (a *App) tabMenu(svc ui.Services, m *ui.Menu, t *tab) {
 // (expandToReveal) as they are read.
 func (a *App) revealInTree(rel string) {
 	a.showSidebar, a.sidePane, a.focus = true, 0, focusSidebar
-	a.selected, a.revealing = rel, rel
+	a.selected, a.revealing, a.revealFocus = rel, rel, true
+}
+
+// followActiveTab selects the file of the active tab in the tree, as
+// IntelliJ's Always Select Opened File, when it changes. Unlike
+// revealInTree it leaves the sidebar, its pane and the keyboard's focus
+// as they are: the tree shows the file when it is next built.
+func (a *App) followActiveTab() {
+	if len(a.tabs) == 0 {
+		return
+	}
+	t := a.tabs[a.active]
+	// The tab, not its path: a rename moves the path of the same tab, and
+	// the tree has followed the rename already.
+	if t.ed == nil || t == a.followed {
+		return
+	}
+	a.followed = t
+	// A click on its row already selected it, and the tree shows it.
+	if a.selected == t.path {
+		return
+	}
+	a.selected, a.revealing, a.revealFocus = t.path, t.path, false
 }
 
 // expandToReveal opens the folders above a.revealing as far as the tree

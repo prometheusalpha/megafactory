@@ -166,7 +166,7 @@ func (d *debugService) frameID() int {
 func (d *debugService) stopped() bool { return d.phase == debugStopped && d.conn != nil }
 
 func (a *App) debugPath() string {
-	return filepath.Join(a.project, ".megafactory", "breakpoints.json")
+	return filepath.Join(a.project, ".idea", "megafactory_breakpoints.json")
 }
 
 // loadBreakpoints reads the project's breakpoints, as a project opening
@@ -174,7 +174,7 @@ func (a *App) debugPath() string {
 func (a *App) loadBreakpoints() {
 	b, err := dap.LoadBreakpoints(a.debugPath())
 	if err != nil {
-		a.host.ShowError("Couldn't read breakpoints.json", err.Error())
+		a.host.ShowError("Couldn't read megafactory_breakpoints.json", err.Error())
 	}
 	a.debug.bps = b
 	a.debug.last = map[string]debugText{}
@@ -185,7 +185,7 @@ func (a *App) saveBreakpoints() {
 		return
 	}
 	if err := a.debug.bps.Save(a.debugPath()); err != nil {
-		a.host.ShowError("Couldn't save breakpoints.json", err.Error())
+		a.host.ShowError("Couldn't save megafactory_breakpoints.json", err.Error())
 	}
 }
 

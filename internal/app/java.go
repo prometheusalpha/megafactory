@@ -966,7 +966,7 @@ func (a *App) javaHover(t *tab, r editor.HoverRequest) {
 			if j.srv != srv || !a.tabActive(t) || t.ed.Buffer.Version() != r.Version {
 				return
 			}
-			t.ed.ShowHover(start, end, text, nil)
+			t.ed.ShowHover(start, end, "", hoverBuild(text))
 		}
 	})
 }

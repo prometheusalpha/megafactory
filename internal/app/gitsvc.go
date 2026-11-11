@@ -124,13 +124,17 @@ func (a *App) gitBranchChip(c *ui.Context, k *colors) {
 		ui.Icon(c, icon("git-branch")).Size(12, 12).TextColor(k.textFaint)
 		ui.Text(c, a.branch).FontSize(11.5).TextColor(k.text).SingleLine()
 	})
-	e.OnClick(func() {
-		if a.git.ok {
-			a.openBranchPicker()
-		} else {
-			a.host.ShowError("Not a git repository", "This project is not a git repository.")
-		}
-	})
+	e.OnClick(a.clickBranch)
+}
+
+// clickBranch is shared by the title bar's and the status bar's branch
+// chips: open the picker, or say why it can't be.
+func (a *App) clickBranch() {
+	if a.git.ok {
+		a.openBranchPicker()
+	} else {
+		a.host.ShowError("Not a git repository", "This project is not a git repository.")
+	}
 }
 
 // changesPage lists the working tree's changes, which a click compares

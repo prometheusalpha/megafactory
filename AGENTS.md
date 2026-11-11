@@ -1,0 +1,1 @@
+- Khi code tính năng BẮT BUỘC PHẢI chia vào folder, TUYỆT ĐỐI KHÔNG dàn trải vào root dir

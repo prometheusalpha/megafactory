@@ -33,7 +33,7 @@ func TestRecentProjectsKept(t *testing.T) {
 
 func TestPaletteSwitchesProject(t *testing.T) {
 	a, tt, first, _ := twoProjects(t)
-	tt.Key(ui.Cmd|ui.Shift, ui.KeyO)
+	tt.Key(ui.Cmd|ui.Alt, ui.KeyR)
 	tt.Frame()
 	if !tt.HasText("current") || !tt.HasText("spring-demo") {
 		t.Fatal("palette shows no projects")
@@ -48,7 +48,7 @@ func TestPaletteSwitchesProject(t *testing.T) {
 	// Down past the projects is Open Folder.
 	picked := false
 	a.host.PickFolder = func(func(string)) { picked = true }
-	tt.Key(ui.Cmd|ui.Shift, ui.KeyO)
+	tt.Key(ui.Cmd|ui.Alt, ui.KeyR)
 	tt.Frame()
 	tt.Key(0, ui.KeyDown)
 	tt.Key(0, ui.KeyDown)
@@ -64,14 +64,14 @@ func TestPaletteAsksToSave(t *testing.T) {
 	tt.Type("x")
 	var asked string
 	a.host.Ask = func(q Question, done func(int)) { asked = q.Message; done(2) }
-	tt.Key(ui.Cmd|ui.Shift, ui.KeyO)
+	tt.Key(ui.Cmd|ui.Alt, ui.KeyR)
 	tt.Frame()
 	click(t, tt, "spring-demo")
 	if asked != "Save the changes to “todo.md”?" || a.project != second {
 		t.Fatalf("asked %q, project %q", asked, a.project)
 	}
 	a.host.Ask = func(_ Question, done func(int)) { done(0) }
-	tt.Key(ui.Cmd|ui.Shift, ui.KeyO)
+	tt.Key(ui.Cmd|ui.Alt, ui.KeyR)
 	tt.Frame()
 	click(t, tt, "spring-demo")
 	if a.project != first || readSample(t, second, "todo.md") != "x- [ ] x\n" {
@@ -84,7 +84,7 @@ func TestPaletteMissingAndRemove(t *testing.T) {
 	os.RemoveAll(first)
 	var shown string
 	a.host.ShowError = func(title, _ string) { shown = title }
-	tt.Key(ui.Cmd|ui.Shift, ui.KeyO)
+	tt.Key(ui.Cmd|ui.Alt, ui.KeyR)
 	tt.Frame()
 	if !tt.HasText("not found") {
 		t.Error("a gone project isn't marked")
@@ -93,7 +93,7 @@ func TestPaletteMissingAndRemove(t *testing.T) {
 	if shown != "Project not found" || a.project != second || slices.Contains(a.recent, first) {
 		t.Errorf("shown %q, project %q, recent %q", shown, a.project, a.recent)
 	}
-	tt.Key(ui.Cmd|ui.Shift, ui.KeyO)
+	tt.Key(ui.Cmd|ui.Alt, ui.KeyR)
 	tt.Frame()
 	click(t, tt, "Remove notes from Recent Projects")
 	if len(a.recent) != 0 || a.project != second || a.palette == nil {

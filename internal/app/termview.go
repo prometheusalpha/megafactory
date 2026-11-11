@@ -31,6 +31,9 @@ func (l LiveTerm) View(c *ui.Context) ui.Element { return terminal.View(c, l.T) 
 func (l LiveTerm) Title() string                 { return l.T.Title() }
 func (l LiveTerm) Close() error                  { return l.T.Close() }
 
+// termListW is the width of the list of terminals.
+const termListW = 176
+
 // termTab is one terminal of the Terminal page. Its program keeps running
 // while another tab shows, as a terminal shows in one view at a time.
 type termTab struct {
@@ -62,19 +65,9 @@ func (a *App) terminalPage(c *ui.Context, k *colors) {
 	if len(a.terms) == 0 && !a.termStarting && a.termErr == nil {
 		a.newTerm()
 	}
-	ui.Column(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
-		ui.Row(c).Height(34).Padding(0, 8, 0, 6).Gap(8).AlignItems(ui.Center).Children(func() {
-			tabs := ui.TabsBase(c, &a.activeTerm, len(a.terms))
-			track(k, tabs.List).Children(func() {
-				for i, t := range slices.Clone(a.terms) {
-					a.termTabView(c, k, tabs.Tab(i), i, t)
-				}
-			})
-			if iconButton(c, k, "plus", "New Terminal", 24, 14).Clicked() {
-				a.newTerm()
-			}
-		})
-		ui.Column(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
+	ui.Row(c).Grow(1).MinHeight(0).FillWidth().AlignItems(ui.Stretch).Children(func() {
+		a.termList(c, k)
+		ui.Column(c).Grow(1).MinHeight(0).MinWidth(0).Children(func() {
 			switch {
 			case a.termErr != nil:
 				buildNote(c, a.termErr.Error(), c.Theme().Danger)
@@ -96,11 +89,38 @@ func (a *App) terminalPage(c *ui.Context, k *colors) {
 	})
 }
 
+// termList is the terminals as one list down the left, scrolling when
+// there are more than fit.
+func (a *App) termList(c *ui.Context, k *colors) {
+	ui.Column(c).Width(termListW).Shrink(0).MinHeight(0).Padding(6, 6, 6, 8).Gap(4).Children(func() {
+		ui.Row(c).Height(24).Padding(0, 2, 0, 6).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "Terminals").FontSize(11.5).FontWeight(600).TextColor(k.textMuted).SingleLine().Grow(1)
+			if iconButton(c, k, "plus", "New Terminal", 24, 14).Clicked() {
+				a.newTerm()
+			}
+		})
+		ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
+			tabs := ui.TabsBase(c, &a.activeTerm, len(a.terms))
+			tabs.List.Column().FillWidth().Gap(2).Children(func() {
+				for i, t := range slices.Clone(a.terms) {
+					a.termTabView(c, k, tabs.Tab(i), i, t)
+				}
+			})
+		})
+	})
+}
+
 func (a *App) termTabView(c *ui.Context, k *colors, e ui.Element, i int, t *termTab) {
-	trackTab(k, e, i == a.activeTerm).Padding(0, 8, 0, 10).Label(termLabel(t)).Children(func() {
+	e = e.Row().FillWidth().Height(28).Padding(0, 4, 0, 10).Gap(6).Justify(ui.SpaceBetween).AlignItems(ui.Center).Radius(7)
+	if i == a.activeTerm {
+		e.Background(k.selected)
+	} else if e.Hovered() {
+		e.Background(k.hover)
+	}
+	e.Label(termLabel(t)).Children(func() {
 		if t.editing {
 			in := ui.TextInputBase(c.Key("term-name"), &t.rename).Label("Terminal name").FontSize(12).TextColor(k.text).
-				Width(140).AutoFocus()
+				Grow(1).MinWidth(0).AutoFocus()
 			if t.fresh {
 				t.fresh = false
 				in.SetTextSelection(0, utf8.RuneCountInString(t.rename))
@@ -265,7 +285,7 @@ func (a *App) stackRel(file string) (string, bool) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "target", "build", "node_modules", ".megafactory":
+			case ".git", "target", "build", "node_modules", ".idea":
 				return filepath.SkipDir
 			}
 			return nil

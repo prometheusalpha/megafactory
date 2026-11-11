@@ -44,6 +44,9 @@ type tab struct {
 	// Diff tabs have no ed; they show a DiffState instead.
 	diff    *editor.DiffState
 	diffRel string
+	// autoVer is the version of the text autosave last saw modified, so
+	// that each edit schedules its save once.
+	autoVer uint64
 }
 
 const settingsPath = "megafactory:settings"
@@ -122,6 +125,8 @@ type App struct {
 	selected    string
 	treeFocus   string // the path of the tree's row with the focus
 	revealing   string // the path the tree opens its folders to show
+	revealFocus bool   // whether the row revealed takes the keyboard's focus
+	followed    *tab   // the file tab the tree last followed
 	edit        *treeEdit
 	clip        *clipboard
 
@@ -144,9 +149,13 @@ type App struct {
 	mainClasses []javalang.MainClass
 
 	recent  []string // the projects opened last, the most recent first
+	sess    sessionState
 	palette *recentPalette
 	files   *filePalette
 	findIn  *findInFiles
+
+	// autoSaveText is the delay field's text, which may be half typed.
+	autoSaveText string
 
 	// keys is the shortcuts of keymap.Actions; keysChanged tells the
 	// window, whose menu bar shows some, that one was rebound.
@@ -220,6 +229,7 @@ func New(st State, s Settings) *App {
 	prefs, themes = s, themeNamed(s.Theme)
 	a := newApp(st)
 	a.recent = loadRecent()
+	a.sess.store = loadSessions()
 	a.servers = servers{artifacts: setup.Artifacts, client: http.DefaultClient}
 	a.java.starter = startLanguageServer(a)
 	return a
@@ -248,13 +258,15 @@ func (a *App) View(c *ui.Context) {
 	// after.
 	a.javaFrame()
 	a.gitFrame()
+	a.followActiveTab()
+	a.saveSession()
 	a.debugFrame()
+	a.autoSaveFrame()
 	// While the settings page waits for a key, none is a shortcut.
 	if !a.Recording() {
 		c.OnShortcut(ui.Cmd, ui.KeyB, func() { a.showSidebar = !a.showSidebar })
 		c.OnShortcut(ui.Cmd, ui.KeyJ, func() { a.showBottom = !a.showBottom })
 		c.OnShortcut(ui.Cmd, ui.KeyO, a.OpenFolder)
-		c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyO, a.OpenRecentPalette)
 		c.OnShortcut(ui.Cmd, ui.KeyComma, a.openSettings)
 		// On macOS the File menu takes these first, and does the same.
 		c.OnShortcut(ui.Cmd, ui.KeyS, a.SaveActive)
@@ -335,11 +347,13 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 		if a.root != nil {
 			label = a.root.name
 		}
-		if chip(c, k, "folder-open", label).Tooltip("Recent Projects  ⌘⇧O").Clicked() {
+		if chip(c, k, "folder-open", label).Tooltip(shortcutTip("Recent Projects", a.keys.Binding("recentProjects"))).Clicked() {
 			a.OpenRecentPalette()
 		}
 		if a.root != nil {
-			chip(c, k, "git-branch", a.branch).Tooltip("Branches")
+			if chip(c, k, "git-branch", a.branch).Tooltip("Branches").Clicked() {
+				a.clickBranch()
+			}
 		}
 		ui.Spacer(c)
 		a.runConfigSelect(c, k)
@@ -363,7 +377,7 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 			if sync.Clicked() {
 				a.syncBuild()
 			}
-			if iconButton(c, k, "panel-bottom", "Toggle Panel  ⌘J", 30, 17).Clicked() {
+			if iconButton(c, k, "panel-bottom", "Toggle Panel  "+a.panelKeys(), 30, 17).Clicked() {
 				a.showBottom = !a.showBottom
 			}
 			if iconButton(c, k, "settings-2", "Settings  ⌘,", 30, 16).Clicked() {
@@ -558,8 +572,11 @@ func (a *App) tree(c *ui.Context, k *colors) {
 		row := it.Row.Height(26).Gap(6).Padding(0, 8).PaddingStart(8 + 10*float32(it.Depth())).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 		if a.revealing != "" && a.revealing == n.path {
 			a.revealing = ""
-			// The focus too, so that the tree's keys act on it.
-			row.ScrollIntoView(ui.ScrollIntoViewOptions{Block: ui.ScrollCenter}).Focus()
+			row.ScrollIntoView(ui.ScrollIntoViewOptions{Block: ui.ScrollCenter})
+			// The focus too when asked to, so that the tree's keys act on it.
+			if a.revealFocus {
+				row.Focus()
+			}
 		}
 		if a.selected == n.path {
 			row.Background(k.selected)
@@ -671,18 +688,23 @@ func (a *App) openFile(n *node) {
 			if a.activate(n.path) {
 				return
 			}
-			buf := editor.NewBuffer(string(data))
-			buf.SetLanguage(languageFor(n.name))
-			// Diagnostics or inlays may build the editor before its first
-			// frame, which takes the style then and not again.
-			ed := &editor.State{Buffer: buf, WrapGuides: []int{120}, Font: code.editorFont(), LineHeight: prefs.EditorLineHeight}
-			t := &tab{path: n.path, name: n.name, ed: ed}
-			a.tabs = append(a.tabs, t)
-			a.active = len(a.tabs) - 1
-			a.javaTabOpened(t)
-			a.gitTabOpened(t)
+			a.addFileTab(n.path, n.name, data)
 		}
 	})
+}
+
+// addFileTab opens a tab on a file's text, and makes it the active one.
+func (a *App) addFileTab(rel, name string, data []byte) {
+	buf := editor.NewBuffer(string(data))
+	buf.SetLanguage(languageFor(name))
+	// Diagnostics or inlays may build the editor before its first
+	// frame, which takes the style then and not again.
+	ed := &editor.State{Buffer: buf, WrapGuides: []int{120}, Font: code.editorFont(), LineHeight: prefs.EditorLineHeight}
+	t := &tab{path: rel, name: name, ed: ed}
+	a.tabs = append(a.tabs, t)
+	a.active = len(a.tabs) - 1
+	a.javaTabOpened(t)
+	a.gitTabOpened(t)
 }
 
 func (a *App) openSettings() {
@@ -725,7 +747,7 @@ func (a *App) editorCard(c *ui.Context, k *colors) ui.Element {
 					return
 				}
 				ui.Text(c, "No file open").FontSize(16).FontWeight(600).TextColor(k.text)
-				ui.Text(c, "Open a file from the project tree · ⌘B sidebar · ⌘J panel").FontSize(12.5).TextColor(k.textMuted)
+				ui.Text(c, "Open a file from the project tree · ⌘B sidebar · "+a.panelKeys()+" panel").FontSize(12.5).TextColor(k.textMuted)
 			})
 			return
 		}
@@ -743,12 +765,7 @@ func (a *App) editorCard(c *ui.Context, k *colors) ui.Element {
 			a.settingsPage(c, k)
 			return
 		}
-		_, th, _ := themes.pick(c.Theme().Dark)
-		if th == nil {
-			th = editor.DefaultTheme(c.Theme())
-			th.Background = k.editor
-		}
-		cur.ed.Theme = th
+		cur.ed.Theme = activeEditorTheme(c, k)
 		cur.ed.Font, cur.ed.LineHeight = code.editorFont(), prefs.EditorLineHeight
 		// The server answers a Java file's completions, hovers and
 		// definitions; the editor asks through these.
@@ -854,7 +871,7 @@ func (a *App) bottomPanel(c *ui.Context, k *colors) ui.Element {
 				}
 			})
 			ui.Spacer(c)
-			if iconButton(c, k, "x", "Hide Panel  ⌘J", 26, 15).Clicked() {
+			if iconButton(c, k, "x", "Hide Panel  "+a.panelKeys(), 26, 15).Clicked() {
 				a.showBottom = false
 			}
 		})
@@ -903,4 +920,15 @@ func placeholder(c *ui.Context, k *colors, s string) {
 	ui.Column(c).Grow(1).Center().Padding(16).Children(func() {
 		ui.Text(c, s).FontSize(12.5).TextColor(k.textMuted)
 	})
+}
+
+// activeEditorTheme is the theme the editors take: the picked one, else the
+// default's for the window's colors.
+func activeEditorTheme(c *ui.Context, k *colors) *editor.Theme {
+	_, th, _ := themes.pick(c.Theme().Dark)
+	if th == nil {
+		th = editor.DefaultTheme(c.Theme())
+		th.Background = k.editor
+	}
+	return th
 }

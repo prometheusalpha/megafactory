@@ -117,7 +117,7 @@ func TestSettingsChangeTheme(t *testing.T) {
 
 func TestHideBottomPanel(t *testing.T) {
 	a, tt := openSample(t)
-	click(t, tt, "Hide Panel  ⌘J")
+	click(t, tt, "Hide Panel  ⌘J · ⌃`")
 	if a.showBottom || tt.HasText("Terminal") {
 		t.Errorf("panel still shown: %v", a.showBottom)
 	}
@@ -702,5 +702,69 @@ func TestRevealWaitsForReads(t *testing.T) {
 	tt.Frame()
 	if a.revealing != "" || !tt.HasText("DemoApplication.java") {
 		t.Errorf("revealing %q, file shown %v", a.revealing, tt.HasText("DemoApplication.java"))
+	}
+}
+
+func TestTreeFollowsActiveTab(t *testing.T) {
+	a, tt, _ := sampleWithMenu(t)
+	click(t, tt, "resources", "config.json")
+	click(t, tt, "application.properties")
+	cfg, props := "src/main/resources/config.json", "src/main/resources/application.properties"
+	if a.selected != props {
+		t.Fatalf("selected %q after opening by click", a.selected)
+	}
+	// Fold the tree, then go back to the other tab: the tree opens up to it
+	// and the keyboard stays in the editor.
+	click(t, tt, "src")
+	a.activate(cfg)
+	for range 4 {
+		tt.Frame()
+	}
+	if a.selected != cfg || a.revealing != "" || a.focus != focusEditor || !tt.HasText("application.properties") {
+		t.Errorf("selected %q, revealing %q, focus %v", a.selected, a.revealing, a.focus)
+	}
+	// A hidden sidebar stays hidden, and shows the file when it comes back.
+	click(t, tt, "src")
+	a.showSidebar = false
+	a.activate(props)
+	for range 2 {
+		tt.Frame()
+	}
+	if a.showSidebar || a.selected != props || a.revealing != props {
+		t.Errorf("sidebar %v, selected %q, revealing %q", a.showSidebar, a.selected, a.revealing)
+	}
+	// The settings tab is no file: the selection stays.
+	a.openSettings()
+	tt.Frame()
+	if a.selected != props {
+		t.Errorf("selected %q on the settings tab", a.selected)
+	}
+}
+
+func TestReopenedProjectRestoresTabs(t *testing.T) {
+	a, tt := openSample(t)
+	proj := a.project
+	click(t, tt, "src", "main", "java", "com", "example", "demo", "DemoApplication.java", "pom.xml")
+	a.saveSession()
+	a.OpenProject(t.TempDir())
+	if len(a.tabs) != 0 {
+		t.Fatalf("other project kept %d tabs", len(a.tabs))
+	}
+	a.OpenProject(proj)
+	if len(a.tabs) != 2 || a.tabs[0].name != "DemoApplication.java" || a.tabs[a.active].name != "pom.xml" {
+		t.Fatalf("restored %d tabs, active %d", len(a.tabs), a.active)
+	}
+}
+
+func TestCtrlBackquoteTogglesBottomPanel(t *testing.T) {
+	a, tt := openSample(t)
+	was := a.showBottom
+	tt.Key(ui.Ctrl, ui.KeyBackquote)
+	if a.showBottom == was {
+		t.Errorf("Ctrl+` left the panel as it was: %v", was)
+	}
+	tt.Key(ui.Ctrl, ui.KeyBackquote)
+	if a.showBottom != was {
+		t.Errorf("Ctrl+` twice: panel %v, want %v", a.showBottom, was)
 	}
 }

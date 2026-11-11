@@ -1,5 +1,5 @@
 // Package runcfg owns the run-configuration model, its persistence in
-// .megafactory/run.json, and the one translation from a config to a command
+// .idea/megafactory_run.json, and the one translation from a config to a command
 // the runner can spawn. All knowledge that varies by kind lives in table.
 package runcfg
 
@@ -79,6 +79,7 @@ type Field struct {
 	Ptr   func(*Config) *string
 	Multi bool // a textarea instead of a line input
 	Pick  bool // a main-class picker fed by javalang.ResolveMainClasses
+	Env   bool // a name/value table; the text is one KEY=value per line
 }
 
 // Spec is a kind's descriptor, derived from table.
@@ -340,7 +341,7 @@ func appFields() []Field {
 		{Label: "Module", Ptr: func(c *Config) *string { return &c.Module }},
 		{Label: "Program arguments", Ptr: func(c *Config) *string { return &c.ProgramArgs }, Multi: true},
 		{Label: "VM options", Ptr: func(c *Config) *string { return &c.VMOptions }, Multi: true},
-		{Label: "Environment", Ptr: func(c *Config) *string { return &c.Env }, Multi: true},
+		{Label: "Environment", Ptr: func(c *Config) *string { return &c.Env }, Env: true},
 		{Label: "Working directory", Ptr: func(c *Config) *string { return &c.WorkingDir }},
 		{Label: "JDK", Ptr: func(c *Config) *string { return &c.JDK }},
 	}
@@ -353,7 +354,7 @@ func springFields() []Field {
 func mavenFields() []Field {
 	return []Field{
 		{Label: "Goals", Ptr: func(c *Config) *string { return &c.Goals }, Multi: true},
-		{Label: "Environment", Ptr: func(c *Config) *string { return &c.Env }, Multi: true},
+		{Label: "Environment", Ptr: func(c *Config) *string { return &c.Env }, Env: true},
 		{Label: "Working directory", Ptr: func(c *Config) *string { return &c.WorkingDir }},
 	}
 }
@@ -361,7 +362,7 @@ func mavenFields() []Field {
 func gradleFields() []Field {
 	return []Field{
 		{Label: "Tasks", Ptr: func(c *Config) *string { return &c.Tasks }, Multi: true},
-		{Label: "Environment", Ptr: func(c *Config) *string { return &c.Env }, Multi: true},
+		{Label: "Environment", Ptr: func(c *Config) *string { return &c.Env }, Env: true},
 		{Label: "Working directory", Ptr: func(c *Config) *string { return &c.WorkingDir }},
 	}
 }
@@ -369,7 +370,7 @@ func gradleFields() []Field {
 func shellFields() []Field {
 	return []Field{
 		{Label: "Command", Ptr: func(c *Config) *string { return &c.Command }, Multi: true},
-		{Label: "Environment", Ptr: func(c *Config) *string { return &c.Env }, Multi: true},
+		{Label: "Environment", Ptr: func(c *Config) *string { return &c.Env }, Env: true},
 		{Label: "Working directory", Ptr: func(c *Config) *string { return &c.WorkingDir }},
 	}
 }

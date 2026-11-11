@@ -13,10 +13,13 @@ import (
 // settings page changes them.
 type Settings struct {
 	// EditorLineHeight is the height of the editor's lines as a multiple
-	// of the font's size. Ghostty's adjust-cell-height sizes the
-	// terminal's rows alone: rows roomy enough for a terminal read too
-	// sparse as code.
+	// of the font's size. The terminal's rows have their own, as rows
+	// roomy enough for code read too sparse in a terminal.
 	EditorLineHeight float32 `json:"editorLineHeight"`
+	// TerminalLineHeight is the height of the terminal's rows as a
+	// multiple of the font's own. It replaces Ghostty's adjust-cell-height,
+	// which the user's config sets for their Ghostty's sake.
+	TerminalLineHeight float32 `json:"terminalLineHeight"`
 	// Appearance is "system", "light" or "dark", as mygo.ThemeSource.
 	Appearance string `json:"appearance"`
 	// Theme names one of themeChoices.
@@ -24,20 +27,23 @@ type Settings struct {
 	// InlineErrors shows each problem's message at the end of its line,
 	// as an inlay, rather than in the hover alone.
 	InlineErrors bool `json:"inlineErrors"`
-	// InlineBlame and GutterBlame are off by default: the editor has one
-	// inlay list (shared with inline errors), and the gutter column costs
-	// width.
+	// InlineBlame is on by default, as it only annotates the caret's line.
+	// GutterBlame is off: its column costs width.
 	InlineBlame bool `json:"inlineBlame"`
 	GutterBlame bool `json:"gutterBlame"`
 	// CompactFolders shows a chain of folders each holding only the next as
 	// one row in the project tree, as IntelliJ does its middle packages.
 	CompactFolders bool `json:"compactFolders"`
+	// AutoSave writes a modified file once AutoSaveDelay seconds have
+	// passed since its last edit.
+	AutoSave      bool    `json:"autoSave"`
+	AutoSaveDelay float32 `json:"autoSaveDelay"`
 	// Keymap holds the shortcuts the user rebound, by keymap.Action ID;
 	// an action not in it keeps its default.
 	Keymap map[string]string `json:"keymap,omitempty"`
 }
 
-var defaultSettings = Settings{EditorLineHeight: 1.5, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: false, GutterBlame: false, CompactFolders: true}
+var defaultSettings = Settings{EditorLineHeight: 1.5, TerminalLineHeight: 1.2, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: true, GutterBlame: false, CompactFolders: true, AutoSave: true, AutoSaveDelay: 1}
 
 var prefs = defaultSettings
 

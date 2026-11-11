@@ -14,6 +14,8 @@ import (
 // OpenProject replaces the open project with the folder at dir, and its
 // tabs with none: switchProject asked to save them.
 func (a *App) OpenProject(dir string) {
+	// The tabs of the project left, as the last frame may not have.
+	a.saveSession()
 	if a.stopWatch != nil {
 		a.stopWatch()
 	}
@@ -29,7 +31,7 @@ func (a *App) OpenProject(dir string) {
 	a.pendingLine = nil
 	a.root = &node{name: filepath.Base(dir), dir: true, open: true}
 	a.tabs = slices.DeleteFunc(a.tabs, func(t *tab) bool { return t.ed != nil || t.diff != nil })
-	a.active, a.selected, a.treeFocus = 0, "", ""
+	a.active, a.selected, a.treeFocus, a.followed = 0, "", "", nil
 	tree := a.root
 	a.stopWatch = a.host.Watch(dir, func(dirs []string) {
 		if a.root == tree {
@@ -37,6 +39,7 @@ func (a *App) OpenProject(dir string) {
 		}
 	})
 	a.loadDir(a.root)
+	a.restoreTabs(a.sess.store[dir])
 	SaveState(a.State())
 	a.setRecent(recent.Add(a.recent, dir))
 }

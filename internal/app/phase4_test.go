@@ -102,7 +102,7 @@ func TestTerminalTabsOpenCloseRename(t *testing.T) {
 	}
 }
 
-// 4.3 A config saved through the dialog lands in .megafactory/run.json.
+// 4.3 A config saved through the dialog lands in .idea/megafactory_run.json.
 func TestRunConfigDialogPersists(t *testing.T) {
 	a, tt, _ := phase4App(t)
 	a.editConfigurations()
@@ -130,7 +130,7 @@ func TestRunConfigDialogPersists(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(f.Configs) != 1 || f.Configs[0].Name != "Say hi" || f.Configs[0].Command != "echo hi" {
-		t.Errorf("run.json %v", f.Configs)
+		t.Errorf("megafactory_run.json %v", f.Configs)
 	}
 	back, err := runcfg.Load(a.runPath())
 	if err != nil || len(back.All()) != 1 {
@@ -169,7 +169,7 @@ func TestRunConfigDuplicateAndDelete(t *testing.T) {
 	}
 	data, _ := os.ReadFile(a.runPath())
 	if strings.Contains(string(data), "App (copy)") {
-		t.Error("deleted config still in run.json")
+		t.Error("deleted config still in megafactory_run.json")
 	}
 }
 
@@ -195,10 +195,13 @@ func TestRunConsoleStreamsAndStackLink(t *testing.T) {
 	if !a.runConsole.done {
 		t.Error("the run did not end")
 	}
-	if !tt.HasText("running") {
-		t.Errorf("console text missing: %v", tt.Texts())
+	// The output is one read-only editor, so its text is the buffer's and a
+	// Cmd+click on the reference is the editor's go-to-definition.
+	text := a.runConsole.ed.Buffer.String()
+	if !strings.HasPrefix(text, "running\nat com.example.demo") {
+		t.Errorf("console text %q", text)
 	}
-	click(t, tt, "DemoApplication.java:12")
+	a.runConsole.ed.OnDefinition(strings.Index(text, "DemoApplication.java:12") + 3)
 	tt.Frame()
 	if len(a.tabs) != 1 || a.tabs[0].path != demoRel {
 		t.Fatalf("stack link did not open the file: %v", a.tabs)
@@ -370,7 +373,7 @@ func TestSelectingRunConfigPersistsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if back.Selected() != two.ID {
-		t.Errorf("run.json selected %q, want %q", back.Selected(), two.ID)
+		t.Errorf("megafactory_run.json selected %q, want %q", back.Selected(), two.ID)
 	}
 }
 
@@ -390,7 +393,7 @@ func TestDeletingSelectedConfigReselects(t *testing.T) {
 	}
 	back, _ := runcfg.Load(a.runPath())
 	if back.Selected() != two.ID {
-		t.Errorf("run.json selected %q, want the survivor %q", back.Selected(), two.ID)
+		t.Errorf("megafactory_run.json selected %q, want the survivor %q", back.Selected(), two.ID)
 	}
 }
 
@@ -406,5 +409,41 @@ func TestLateTerminalSpawnDoesNotJoinNewProject(t *testing.T) {
 	apply()
 	if len(a.terms) != 0 {
 		t.Errorf("a terminal of the old project joined the new one: %v", a.terms)
+	}
+}
+
+// The dialog opens on a config's form, and an unsaved edit survives a trip
+// to another config.
+func TestRunConfigDialogOpensOnFormAndKeepsDraft(t *testing.T) {
+	a, tt, _ := phase4App(t)
+	one, _ := a.runStore.Upsert(runcfg.Config{Name: "One", Kind: runcfg.Shell, Command: "echo 1"})
+	two, _ := a.runStore.Upsert(runcfg.Config{Name: "Two", Kind: runcfg.Shell, Command: "echo 2"})
+	a.editConfigurations()
+	tt.Frame()
+	if !a.runEdit.editing || a.runEdit.sel != one.ID {
+		t.Fatalf("opened on sel %q editing %v, want %q editing", a.runEdit.sel, a.runEdit.editing, one.ID)
+	}
+	a.runEdit.draft.Command = "echo edited"
+	a.pickRunConfig(a.runEdit, two.ID)
+	if a.runEdit.draft.Command != "echo 2" {
+		t.Errorf("second config shows %q", a.runEdit.draft.Command)
+	}
+	a.pickRunConfig(a.runEdit, one.ID)
+	if a.runEdit.draft.Command != "echo edited" {
+		t.Errorf("unsaved edit lost: %q", a.runEdit.draft.Command)
+	}
+}
+
+// Cancel drops the unsaved edit and shows the stored config again.
+func TestRunConfigCancelRevertsDraft(t *testing.T) {
+	a, tt, _ := phase4App(t)
+	a.runStore.Upsert(runcfg.Config{Name: "One", Kind: runcfg.Shell, Command: "echo 1"})
+	a.editConfigurations()
+	tt.Frame()
+	a.runEdit.draft.Command = "echo edited"
+	click(t, tt, "Cancel")
+	tt.Frame()
+	if a.runEdit.draft.Command != "echo 1" {
+		t.Errorf("draft after Cancel %q", a.runEdit.draft.Command)
 	}
 }

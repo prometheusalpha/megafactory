@@ -16,6 +16,8 @@ func (a *App) keyActions() map[string]func() {
 		"prevTab":            a.PrevTab,
 		"findFile":           a.OpenFilePalette,
 		"findInFiles":        a.OpenFindInFiles,
+		"recentProjects":     a.OpenRecentPalette,
+		"togglePanel":        func() { a.showBottom = !a.showBottom },
 		"goToImplementation": a.GoToImplementation,
 	}
 }
@@ -65,4 +67,21 @@ func (a *App) shortcutOf(it *ui.MenuItem, id string) *ui.MenuItem {
 		return it.Shortcut(b.Mods, b.Key)
 	}
 	return it
+}
+
+// shortcutTip is a tooltip's text with the key its action has now, if any.
+func shortcutTip(text string, b keymap.Binding) string {
+	if b.Zero() {
+		return text
+	}
+	return text + "  " + b.Label()
+}
+
+// panelKeys is the keys that toggle the bottom panel, for a tooltip: the
+// fixed ⌘J, and the togglePanel binding unless it was left unbound.
+func (a *App) panelKeys() string {
+	if b := a.keys.Binding("togglePanel"); !b.Zero() {
+		return "⌘J · " + b.Label()
+	}
+	return "⌘J"
 }

@@ -91,7 +91,7 @@ func appMenu(a *app.App, win *mygo.Window) *mygo.Menu {
 		{Role: mygo.RoleAppMenu},
 		{Label: "File", Submenu: []*mygo.MenuItem{
 			{Label: "Open Folder…", Accelerator: key("CmdOrCtrl+O"), Click: do(a.OpenFolder)},
-			{Label: "Recent Projects…", Accelerator: key("CmdOrCtrl+Shift+O"), Click: do(a.OpenRecentPalette)},
+			item("Recent Projects…", "recentProjects", a.OpenRecentPalette),
 			mygo.Separator(),
 			{Label: "Save", Accelerator: key("CmdOrCtrl+S"), Click: do(a.SaveActive)},
 			mygo.Separator(),

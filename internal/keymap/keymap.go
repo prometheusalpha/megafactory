@@ -35,6 +35,8 @@ var Actions = []Action{
 	{"prevTab", "Previous Tab", Binding{ui.Ctrl | ui.Shift, ui.KeyTab}},
 	{"findFile", "Go to File", Binding{ui.Cmd, ui.KeyP}},
 	{"findInFiles", "Find in Files", Binding{ui.Cmd | ui.Shift, ui.KeyF}},
+	{"recentProjects", "Recent Projects", Binding{ui.Cmd | ui.Alt, ui.KeyR}},
+	{"togglePanel", "Toggle Bottom Panel", Binding{ui.Ctrl, ui.KeyBackquote}},
 	{"goToImplementation", "Go to Implementation", Binding{ui.Cmd | ui.Shift, ui.KeyI}},
 }
 
@@ -46,7 +48,6 @@ var Fixed = []struct {
 }{
 	{"Save", Binding{ui.Cmd, ui.KeyS}},
 	{"Open Folder", Binding{ui.Cmd, ui.KeyO}},
-	{"Recent Projects", Binding{ui.Cmd | ui.Shift, ui.KeyO}},
 	{"Toggle Sidebar", Binding{ui.Cmd, ui.KeyB}},
 	{"Toggle Panel", Binding{ui.Cmd, ui.KeyJ}},
 	{"Settings", Binding{ui.Cmd, ui.KeyComma}},
