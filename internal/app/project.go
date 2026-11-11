@@ -29,7 +29,7 @@ func (a *App) OpenProject(dir string) {
 	a.pendingLine = nil
 	a.root = &node{name: filepath.Base(dir), dir: true, open: true}
 	a.tabs = slices.DeleteFunc(a.tabs, func(t *tab) bool { return t.ed != nil || t.diff != nil })
-	a.active, a.selected, a.treeFocus = 0, "", ""
+	a.active, a.selected, a.treeFocus, a.followed = 0, "", "", nil
 	tree := a.root
 	a.stopWatch = a.host.Watch(dir, func(dirs []string) {
 		if a.root == tree {

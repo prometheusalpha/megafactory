@@ -122,6 +122,8 @@ type App struct {
 	selected    string
 	treeFocus   string // the path of the tree's row with the focus
 	revealing   string // the path the tree opens its folders to show
+	revealFocus bool   // whether the row revealed takes the keyboard's focus
+	followed    *tab   // the file tab the tree last followed
 	edit        *treeEdit
 	clip        *clipboard
 
@@ -248,6 +250,7 @@ func (a *App) View(c *ui.Context) {
 	// after.
 	a.javaFrame()
 	a.gitFrame()
+	a.followActiveTab()
 	a.debugFrame()
 	// While the settings page waits for a key, none is a shortcut.
 	if !a.Recording() {
@@ -557,8 +560,11 @@ func (a *App) tree(c *ui.Context, k *colors) {
 		row := it.Row.Height(26).Gap(6).Padding(0, 8).PaddingStart(8 + 10*float32(it.Depth())).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 		if a.revealing != "" && a.revealing == n.path {
 			a.revealing = ""
-			// The focus too, so that the tree's keys act on it.
-			row.ScrollIntoView(ui.ScrollIntoViewOptions{Block: ui.ScrollCenter}).Focus()
+			row.ScrollIntoView(ui.ScrollIntoViewOptions{Block: ui.ScrollCenter})
+			// The focus too when asked to, so that the tree's keys act on it.
+			if a.revealFocus {
+				row.Focus()
+			}
 		}
 		if a.selected == n.path {
 			row.Background(k.selected)
