@@ -154,6 +154,9 @@ type App struct {
 	files   *filePalette
 	findIn  *findInFiles
 
+	// autoSaveText is the delay field's text, which may be half typed.
+	autoSaveText string
+
 	// keys is the shortcuts of keymap.Actions; keysChanged tells the
 	// window, whose menu bar shows some, that one was rebound.
 	keys        *keymap.Keymap

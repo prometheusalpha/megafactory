@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 )
 
@@ -53,5 +54,27 @@ func TestAutoSaveOffSchedulesNothing(t *testing.T) {
 	tt.Frame()
 	if n != 0 {
 		t.Errorf("scheduled %d saves with auto save off", n)
+	}
+}
+
+func TestAutoSaveDelayIsTyped(t *testing.T) {
+	a, tt := openSample(t)
+	prefs.AutoSave = true
+	t.Cleanup(func() { prefs = defaultSettings })
+	a.openSettings()
+	tt.Frame()
+	tt.Scroll(640, 400, 0, 600)
+	if err := tt.Click("Auto save delay in seconds"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("2.5")
+	if prefs.AutoSaveDelay != 2.5 {
+		t.Errorf("delay %v after typing 2.5", prefs.AutoSaveDelay)
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("abc")
+	if prefs.AutoSaveDelay != 2.5 {
+		t.Errorf("delay %v after typing text, want it kept", prefs.AutoSaveDelay)
 	}
 }

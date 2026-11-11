@@ -2,13 +2,14 @@ package app
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 )
 
-// autoSaveDelays are the pauses the settings page offers, in seconds.
-var autoSaveDelays = []float32{0.5, 1, 2, 5}
+// The delay the settings page accepts, in seconds.
+const autoSaveMin, autoSaveMax = 0.1, 600
 
 // autoSaveFrame schedules the save of each tab whose text changed since
 // the last frame. The save waits out the delay, and goes only if no later
@@ -48,8 +49,8 @@ func (a *App) hasTab(t *tab) bool {
 	return false
 }
 
-// autoSavePicker is the switch, and the pause before a save as a segmented
-// control, as the appearance's, shown while the switch is on.
+// autoSavePicker is the switch, and the pause before a save as a number
+// of seconds to type, shown while the switch is on.
 func (a *App) autoSavePicker(c *ui.Context, k *colors) {
 	ui.Column(c).Gap(10).Children(func() {
 		if ui.Checkbox(c, &prefs.AutoSave, "Save files automatically").Changed() {
@@ -58,19 +59,25 @@ func (a *App) autoSavePicker(c *ui.Context, k *colors) {
 		if !prefs.AutoSave {
 			return
 		}
-		track(k, ui.Row(c)).AlignSelf(ui.Start).Role(ui.RoleRadioGroup).Label("Auto save delay").Children(func() {
-			for _, d := range autoSaveDelays {
-				label := strconv.FormatFloat(float64(d), 'f', -1, 32) + " s"
-				c.Key(label)
-				on := prefs.AutoSaveDelay == d
-				b := trackTab(k, ui.Row(c), on).Padding(0, 14).Cursor(ui.CursorPointer).Role(ui.RoleRadio).Label(label).Checked(on)
-				b.Children(func() {
-					ui.Text(c, label).FontSize(12.5).FontWeight(600).TextColor(k.text).SingleLine()
-				})
-				b.OnClick(func() {
-					prefs.AutoSaveDelay = d
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "Wait").FontSize(13).TextColor(k.text)
+			in := ui.Row(c).Width(72).Height(28).Padding(0, 10).Radius(8).AlignItems(ui.Center).
+				Background(k.track).Border(0.5, k.trackBorder)
+			var field ui.Element
+			in.Children(func() {
+				field = ui.TextInputBase(c, &a.autoSaveText).Label("Auto save delay in seconds").
+					FontSize(12.5).TextColor(k.text).Grow(1)
+			})
+			ui.Text(c, "seconds after the last edit").FontSize(13).TextColor(k.textMuted)
+			switch {
+			case field.Changed():
+				// Half-typed or out of range text keeps the last delay.
+				if d, err := strconv.ParseFloat(strings.TrimSpace(a.autoSaveText), 32); err == nil && d >= autoSaveMin && d <= autoSaveMax {
+					prefs.AutoSaveDelay = float32(d)
 					saveSettings()
-				})
+				}
+			case !field.Focused():
+				a.autoSaveText = strconv.FormatFloat(float64(prefs.AutoSaveDelay), 'f', -1, 32)
 			}
 		})
 	})
