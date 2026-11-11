@@ -35,6 +35,7 @@ var Actions = []Action{
 	{"prevTab", "Previous Tab", Binding{ui.Ctrl | ui.Shift, ui.KeyTab}},
 	{"findFile", "Go to File", Binding{ui.Cmd, ui.KeyP}},
 	{"findInFiles", "Find in Files", Binding{ui.Cmd | ui.Shift, ui.KeyF}},
+	{"goToImplementation", "Go to Implementation", Binding{ui.Cmd | ui.Shift, ui.KeyI}},
 }
 
 // Fixed are the shortcuts the app keeps as they are, which no action may

@@ -61,6 +61,19 @@ var JavaDebug = Artifact{
 	unpack:  zipEntry("extension/server/" + JavaDebugJar),
 }
 
+// Lombok is the jar jdtls runs as a javaagent for projects that use Lombok,
+// so that the getters and the log fields it generates are seen as code.
+var Lombok = Artifact{
+	Name:    "lombok",
+	Version: "1.18.48",
+	URL:     "https://repo1.maven.org/maven2/org/projectlombok/lombok/1.18.48/lombok-1.18.48.jar",
+	SHA256:  "85477a4655ebb2c074a9099cfb749be454449fee564d4282610df1b85f7c508b",
+	unpack:  plainFile(LombokJar),
+}
+
+// LombokJar is the agent's file in Lombok's folder.
+const LombokJar = "lombok.jar"
+
 // JavaDebugJar is the plugin's file in JavaDebug's folder.
 const JavaDebugJar = "com.microsoft.java.debug.plugin-0.53.2.jar"
 
@@ -92,7 +105,7 @@ func JDK(goos, goarch string) (Artifact, bool) {
 }
 
 // Artifacts are what the IDE needs, in the order they download.
-var Artifacts = []Artifact{JDTLS, JavaDebug}
+var Artifacts = []Artifact{JDTLS, JavaDebug, Lombok}
 
 // Progress is how far a download is: Total is -1 while unknown.
 type Progress struct {
@@ -258,6 +271,18 @@ func untarInto(archive, dir string, strip int) error {
 		if err != nil {
 			return err
 		}
+	}
+}
+
+// plainFile installs the download itself, as name.
+func plainFile(name string) func(archive, dir string) error {
+	return func(archive, dir string) error {
+		f, err := os.Open(archive)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		return writeFile(filepath.Join(dir, name), f, 0o644)
 	}
 }
 

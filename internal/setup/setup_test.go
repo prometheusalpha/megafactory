@@ -178,3 +178,15 @@ func TestJDKPinnedPerSystem(t *testing.T) {
 		t.Error("windows has no pinned JDK yet")
 	}
 }
+
+func TestPlainFile(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "dl")
+	os.WriteFile(f, []byte("agent"), 0o644)
+	dir := t.TempDir()
+	if err := Lombok.unpack(f, dir); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, LombokJar)); string(b) != "agent" {
+		t.Errorf("jar %q", b)
+	}
+}

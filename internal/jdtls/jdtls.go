@@ -33,6 +33,9 @@ type Config struct {
 	// Servers is the folder setup installs jdtls and java-debug under.
 	Servers string
 	Project string
+	// Lombok is the agent's jar, set for a project that uses Lombok: jdtls
+	// runs with it so as to see the code Lombok generates.
+	Lombok string
 	// Workspaces holds the data folder of each project's jdtls.
 	Workspaces string
 	Handler    lsp.Handler
@@ -78,7 +81,7 @@ func Command(cfg Config) (*exec.Cmd, error) {
 	conf := platformConfig(runtime.GOOS, runtime.GOARCH)
 	// jdtls writes into its configuration folder: the install's, which is the
 	// user's own, as setup makes it, not a system one.
-	cmd := exec.Command(cfg.JDK.Java(),
+	args := []string{
 		"-Declipse.application=org.eclipse.jdt.ls.core.id1",
 		"-Dosgi.bundles.defaultStartLevel=4",
 		"-Declipse.product=org.eclipse.jdt.ls.core.product",
@@ -87,12 +90,52 @@ func Command(cfg Config) (*exec.Cmd, error) {
 		"--add-modules=ALL-SYSTEM",
 		"--add-opens", "java.base/java.util=ALL-UNNAMED",
 		"--add-opens", "java.base/java.lang=ALL-UNNAMED",
+	}
+	if cfg.Lombok != "" {
+		args = append(args, "-javaagent:"+cfg.Lombok)
+	}
+	args = append(args,
 		"-jar", jars[0],
 		"-configuration", filepath.Join(home, conf),
 		"-data", WorkspaceDir(cfg.Workspaces, cfg.Project),
 	)
+	cmd := exec.Command(cfg.JDK.Java(), args...)
 	cmd.Dir = cfg.Project
 	return cmd, nil
+}
+
+// LombokJar is the agent's jar under servers.
+func LombokJar(servers string) string {
+	return filepath.Join(setup.Lombok.Dir(servers), setup.LombokJar)
+}
+
+// UsesLombok reports whether a build file of the project names Lombok. Modules
+// keep their own dependencies, so it looks a few folders down, not at the
+// top's alone.
+func UsesLombok(project string) bool {
+	const maxDepth = 4
+	found := false
+	filepath.WalkDir(project, func(p string, d os.DirEntry, err error) error {
+		if err != nil || found {
+			return filepath.SkipDir
+		}
+		if d.IsDir() {
+			rel, _ := filepath.Rel(project, p)
+			if rel != "." && (strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules" || d.Name() == "target" || d.Name() == "build" ||
+				strings.Count(rel, string(filepath.Separator)) >= maxDepth) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		switch d.Name() {
+		case "pom.xml", "build.gradle", "build.gradle.kts", "libs.versions.toml":
+			if b, err := os.ReadFile(p); err == nil && strings.Contains(strings.ToLower(string(b)), "lombok") {
+				found = true
+			}
+		}
+		return nil
+	})
+	return found
 }
 
 // Bundles are the jars jdtls loads as plugins: java-debug's.
@@ -153,6 +196,7 @@ func InitializeParams(project string, pid int, bundles []string, runtimes []jdk.
 				},
 				"hover":              map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
 				"definition":         map[string]any{"linkSupport": false},
+				"implementation":     map[string]any{"linkSupport": false},
 				"publishDiagnostics": map[string]any{},
 			},
 			"window": map[string]any{"workDoneProgress": true},

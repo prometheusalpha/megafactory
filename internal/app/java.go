@@ -40,6 +40,7 @@ type langServer interface {
 	Complete(path string, offset int) (int, []javalang.Item, error)
 	Hover(path string, offset int) (int, int, string, error)
 	Definition(path string, offset int) ([]javalang.Location, error)
+	Implementation(path string, offset int) ([]javalang.Location, error)
 	BuildFilesChanged(paths ...string) error
 	ResolveMainClasses() ([]javalang.MainClass, error)
 	ResolveClasspath(mainClass, projectName string) (modules, classes []string, err error)
@@ -971,8 +972,31 @@ func (a *App) javaHover(t *tab, r editor.HoverRequest) {
 }
 
 // javaDefinition asks the server where the thing at the caret is defined,
-// and opens the first of its files, in the project.
-func (a *App) javaDefinition(t *tab, offset int) {
+// and opens the first of its files, in the project. A method with no body,
+// an interface's or an abstract one's, is not where its code is: with
+// exactly one implementation in the project, as IntelliJ does, that is
+// where it goes.
+func (a *App) javaDefinition(t *tab, offset int) { a.javaGoTo(t, offset, false) }
+
+// GoToImplementation goes to the one implementation of what the caret is
+// on, whatever kind of method it is; with none or several, to its
+// definition, as there is no list to choose from yet.
+func (a *App) GoToImplementation() {
+	if len(a.tabs) == 0 {
+		return
+	}
+	if t := a.tabs[a.active]; t.ed != nil {
+		a.javaGoTo(t, t.ed.Cursor(), true)
+	}
+}
+
+// implementationWait is how long a go to waits for the implementation
+// before it takes the definition.
+var implementationWait = 1500 * time.Millisecond
+
+// javaGoTo is javaDefinition, which looks for the implementation only of
+// a method with no body, unless it is told to for any.
+func (a *App) javaGoTo(t *tab, offset int, anyImpl bool) {
 	j := &a.java
 	srv := j.srv
 	if srv == nil || t.ed == nil || !isJavaPath(t.path) {
@@ -981,15 +1005,40 @@ func (a *App) javaDefinition(t *tab, offset int) {
 	file := a.abs(t.path)
 	version := t.ed.Buffer.Version()
 	a.host.Run(func() func() {
+		// Asked together: what the definition says decides whether the
+		// implementation counts, but not whether it is asked, and the
+		// server takes a request as long as the other's.
+		implsc := make(chan []javalang.Location, 1)
+		go func() {
+			impls, err := srv.Implementation(file, offset)
+			if err != nil {
+				impls = nil
+			}
+			implsc <- impls
+		}()
 		locs, err := srv.Definition(file, offset)
 		if err != nil || len(locs) == 0 {
 			return func() {}
 		}
 		loc := locs[0]
-		line := 0
-		if data, err := os.ReadFile(loc.Path); err == nil {
-			line = lineOfBytes(data, loc.Start)
+		data, _ := os.ReadFile(loc.Path)
+		if anyImpl || bodyless(data, loc.Start) {
+			// jdtls takes about a minute for its first answer: the
+			// definition is what it goes to meanwhile, and the answer, kept,
+			// serves the next time.
+			var impls []javalang.Location
+			select {
+			case impls = <-implsc:
+			case <-time.After(implementationWait):
+			}
+			if len(impls) == 1 {
+				if _, ok := a.relative(impls[0].Path); ok {
+					loc = impls[0]
+					data, _ = os.ReadFile(loc.Path)
+				}
+			}
 		}
+		line := lineOfBytes(data, loc.Start)
 		return func() {
 			if j.srv != srv || !a.tabActive(t) || t.ed.Buffer.Version() != version {
 				return
@@ -1001,6 +1050,35 @@ func (a *App) javaDefinition(t *tab, offset int) {
 			a.openAt(rel, line)
 		}
 	})
+}
+
+// bodyless reports whether the method declared at offset, the start of its
+// name, ends in ';' rather than a body: it is an interface's or an abstract
+// one. Anything else it finds, a field or a type, is not.
+func bodyless(src []byte, offset int) bool {
+	if offset < 0 || offset >= len(src) {
+		return false
+	}
+	depth := 0
+	seenParen := false
+	for _, c := range src[offset:] {
+		switch c {
+		case '(':
+			depth++
+			seenParen = true
+		case ')':
+			depth--
+		case '{', '=':
+			if depth == 0 {
+				return false
+			}
+		case ';':
+			if depth == 0 {
+				return seenParen
+			}
+		}
+	}
+	return false
 }
 
 // lineOfBytes is the line of a byte offset in data, counted in its
@@ -1043,8 +1121,13 @@ func startLanguageServer(a *App) javaStarter {
 		// project stuck starting forever.
 		startCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 		defer cancel()
+		var lombok string
+		if jdtls.UsesLombok(project) {
+			lombok = jdtls.LombokJar(serversDir())
+		}
 		srv, err := jdtls.Start(startCtx, jdtls.Config{
 			JDK:        home,
+			Lombok:     lombok,
 			Runtimes:   runtimes,
 			Servers:    serversDir(),
 			Project:    project,

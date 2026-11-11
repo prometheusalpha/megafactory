@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"megafactory/internal/javalang"
 	"megafactory/internal/setup"
@@ -33,11 +35,12 @@ type fakeJava struct {
 
 	// completion, hover and definition answer as a test says; the path
 	// and offset asked about are kept for the test to check.
-	complete func(path string, offset int) (int, []javalang.Item, error)
-	hover    func(path string, offset int) (int, int, string, error)
-	define   func(path string, offset int) ([]javalang.Location, error)
-	asked    string
-	at       int
+	complete  func(path string, offset int) (int, []javalang.Item, error)
+	hover     func(path string, offset int) (int, int, string, error)
+	define    func(path string, offset int) ([]javalang.Location, error)
+	implement func(path string, offset int) ([]javalang.Location, error)
+	asked     string
+	at        int
 
 	mainClasses []javalang.MainClass
 	classPaths  [][]string
@@ -110,6 +113,15 @@ func (f *fakeJava) Definition(path string, offset int) ([]javalang.Location, err
 		return nil, nil
 	}
 	return f.define(path, offset)
+}
+
+// Implementation is asked together with Definition, which records the
+// request: writing it here too would race.
+func (f *fakeJava) Implementation(path string, offset int) ([]javalang.Location, error) {
+	if f.implement == nil {
+		return nil, nil
+	}
+	return f.implement(path, offset)
 }
 
 func (f *fakeJava) BuildFilesChanged(paths ...string) error {
@@ -289,6 +301,128 @@ func TestJavaEditorFeatures(t *testing.T) {
 	}
 	if got := a.tabs[a.active].ed.CursorPos().Line; got != line {
 		t.Errorf("caret on line %d, want %d", got, line)
+	}
+}
+
+func TestBodyless(t *testing.T) {
+	for _, c := range []struct {
+		src  string
+		want bool
+	}{
+		{"hello(String a);\n", true},
+		{"hello(@Size(max = 3) String a) throws IOException;\n", true},
+		{"hello(String a) {\n  x();\n}\n", false},
+		{"hello = 3;\n", false},
+		{"hello;\n", false},
+	} {
+		if got := bodyless([]byte(c.src), 0); got != c.want {
+			t.Errorf("bodyless(%q) = %v", c.src, got)
+		}
+	}
+	if bodyless(nil, 0) || bodyless([]byte("a();"), 9) {
+		t.Error("bodyless out of range")
+	}
+}
+
+func TestJavaDefinitionToImplementation(t *testing.T) {
+	dir := sampleProject(t)
+	a, f, tt := openDemo(t, dir)
+	tb := a.tabs[a.active]
+
+	ifaceRel := "src/main/java/com/example/demo/Greeter.java"
+	implRel := "src/main/java/com/example/demo/GreeterImpl.java"
+	iface := filepath.Join(dir, filepath.FromSlash(ifaceRel))
+	impl := filepath.Join(dir, filepath.FromSlash(implRel))
+	ifaceSrc := "package com.example.demo;\npublic interface Greeter {\n    String greet();\n}\n"
+	implSrc := "package com.example.demo;\npublic class GreeterImpl implements Greeter {\n    public String greet() {\n        return \"hi\";\n    }\n}\n"
+	os.WriteFile(iface, []byte(ifaceSrc), 0o644)
+	os.WriteFile(impl, []byte(implSrc), 0o644)
+	f.define = func(string, int) ([]javalang.Location, error) {
+		return []javalang.Location{{Path: iface, Start: strings.Index(ifaceSrc, "greet")}}, nil
+	}
+	other := filepath.Join(dir, "Other.java")
+	os.WriteFile(other, []byte("class Other {}\n"), 0o644)
+
+	for _, c := range []struct {
+		name  string
+		impls []javalang.Location
+		want  string
+		line  int
+	}{
+		{"one implementation", []javalang.Location{{Path: impl, Start: strings.Index(implSrc, "greet")}}, implRel, 2},
+		{"several", []javalang.Location{{Path: impl}, {Path: other}}, ifaceRel, 2},
+		{"none", nil, ifaceRel, 2},
+	} {
+		// Each starts from the demo file, where a definition is asked.
+		a.openAt(demoRel, 0)
+		tt.Frame()
+		tb = a.tabs[a.active]
+		f.implement = func(string, int) ([]javalang.Location, error) { return c.impls, nil }
+		tb.ed.OnDefinition(0)
+		tt.Frame()
+		if got := a.tabs[a.active].path; got != c.want {
+			t.Errorf("%s: opened %q, want %q", c.name, got, c.want)
+		}
+		if got := a.tabs[a.active].ed.CursorPos().Line; got != c.line {
+			t.Errorf("%s: caret on line %d, want %d", c.name, got, c.line)
+		}
+	}
+}
+
+func TestGoToImplementationShortcut(t *testing.T) {
+	dir := sampleProject(t)
+	a, f, tt := openDemo(t, dir)
+	// A method with a body: Cmd+click stays on it, the shortcut goes on.
+	baseRel := "src/main/java/com/example/demo/Base.java"
+	subRel := "src/main/java/com/example/demo/Sub.java"
+	base := filepath.Join(dir, filepath.FromSlash(baseRel))
+	sub := filepath.Join(dir, filepath.FromSlash(subRel))
+	baseSrc := "package com.example.demo;\npublic class Base {\n    public void run() { }\n}\n"
+	subSrc := "package com.example.demo;\npublic class Sub extends Base {\n    @Override\n    public void run() { }\n}\n"
+	os.WriteFile(base, []byte(baseSrc), 0o644)
+	os.WriteFile(sub, []byte(subSrc), 0o644)
+	f.define = func(string, int) ([]javalang.Location, error) {
+		return []javalang.Location{{Path: base, Start: strings.Index(baseSrc, "run")}}, nil
+	}
+	f.implement = func(string, int) ([]javalang.Location, error) {
+		return []javalang.Location{{Path: sub, Start: strings.Index(subSrc, "run")}}, nil
+	}
+	a.tabs[a.active].ed.OnDefinition(0)
+	tt.Frame()
+	if got := a.tabs[a.active].path; got != baseRel {
+		t.Fatalf("click opened %q, want %q", got, baseRel)
+	}
+	a.openAt(demoRel, 0)
+	tt.Frame()
+	a.GoToImplementation()
+	tt.Frame()
+	if got := a.tabs[a.active].path; got != subRel {
+		t.Errorf("shortcut opened %q, want %q", got, subRel)
+	}
+}
+
+func TestGoToDoesNotWaitForSlowImplementation(t *testing.T) {
+	defer func(d time.Duration) { implementationWait = d }(implementationWait)
+	implementationWait = 50 * time.Millisecond
+	dir := sampleProject(t)
+	a, f, tt := openDemo(t, dir)
+	ifaceRel := "src/main/java/com/example/demo/Greeter.java"
+	iface := filepath.Join(dir, filepath.FromSlash(ifaceRel))
+	ifaceSrc := "package com.example.demo;\npublic interface Greeter {\n    String greet();\n}\n"
+	os.WriteFile(iface, []byte(ifaceSrc), 0o644)
+	f.define = func(string, int) ([]javalang.Location, error) {
+		return []javalang.Location{{Path: iface, Start: strings.Index(ifaceSrc, "greet")}}, nil
+	}
+	release := make(chan struct{})
+	defer close(release)
+	f.implement = func(string, int) ([]javalang.Location, error) {
+		<-release
+		return []javalang.Location{{Path: filepath.Join(dir, "Other.java")}}, nil
+	}
+	a.tabs[a.active].ed.OnDefinition(0)
+	tt.Frame()
+	if got := a.tabs[a.active].path; got != ifaceRel {
+		t.Errorf("opened %q, want the definition %q", got, ifaceRel)
 	}
 }
 

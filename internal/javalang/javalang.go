@@ -13,9 +13,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -88,11 +90,29 @@ type Session struct {
 	docs        map[string]*document
 	diagnostics func(path string, version uint64, ds []Diagnostic)
 	status      func(Status, string)
+	// impls are the answers to Implementation, kept as the server takes
+	// ~200 ms to give them again; see Implementation for when they go.
+	impls    map[implKey]implAnswer
+	implsGen uint64
 
 	// wmu orders the document notifications: a change must follow the open
 	// it belongs to and precede the next one, whatever goroutine sends them.
 	wmu sync.Mutex
 }
+
+type implKey struct {
+	path   string
+	offset int
+}
+
+type implAnswer struct {
+	locs []Location
+	at   time.Time
+}
+
+// implementationTTL bounds how long an answer is kept: a file changed
+// behind the editor's back, a checkout, is not seen by any change below.
+const implementationTTL = 2 * time.Minute
 
 // document is one open file and its versions, oldest first. A change makes
 // a new document rather than amending this one, so a reader holding it sees
@@ -262,6 +282,7 @@ func (s *Session) Change(path string, text Text) error {
 	// version that overtakes the answer is read against its own bytes.
 	s.mu.Lock()
 	s.docs[path] = doc.with(text)
+	s.dropImplementations()
 	s.mu.Unlock()
 	if err := conn.Notify("textDocument/didChange", params); err != nil {
 		s.mu.Lock()
@@ -280,6 +301,9 @@ func (s *Session) Save(path string) error {
 	if err != nil {
 		return err
 	}
+	s.mu.Lock()
+	s.dropImplementations()
+	s.mu.Unlock()
 	return conn.Notify("textDocument/didSave", didSaveParams{TextDocument: uriDocument{URI: fileURI(path)}})
 }
 
@@ -410,6 +434,48 @@ func (s *Session) Hover(path string, offset int) (int, int, string, error) {
 // Definition asks where the thing at offset is defined. Links and plain
 // locations are both accepted; anything not on disk is dropped.
 func (s *Session) Definition(path string, offset int) ([]Location, error) {
+	return s.locationsAt("textDocument/definition", path, offset)
+}
+
+// Implementation asks where the method or type at offset is implemented:
+// the overriding methods of an interface's or abstract method, the
+// subtypes of a type. Anything not on disk is dropped.
+//
+// jdtls takes ~200 ms for it every time, and ~1 min the first, so an answer
+// is kept until a change, a save or a build file's change (any of which may
+// add or remove an implementation, in any file), or implementationTTL.
+func (s *Session) Implementation(path string, offset int) ([]Location, error) {
+	key := implKey{path, offset}
+	s.mu.Lock()
+	ans, ok := s.impls[key]
+	gen := s.implsGen
+	s.mu.Unlock()
+	if ok && time.Since(ans.at) < implementationTTL {
+		return slices.Clone(ans.locs), nil
+	}
+	locs, err := s.locationsAt("textDocument/implementation", path, offset)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	// An answer that began before a change may be of the text before it.
+	if gen == s.implsGen {
+		if s.impls == nil {
+			s.impls = map[implKey]implAnswer{}
+		}
+		s.impls[key] = implAnswer{slices.Clone(locs), time.Now()}
+	}
+	s.mu.Unlock()
+	return locs, nil
+}
+
+// dropImplementations forgets the kept answers; s.mu is held.
+func (s *Session) dropImplementations() {
+	clear(s.impls)
+	s.implsGen++
+}
+
+func (s *Session) locationsAt(method, path string, offset int) ([]Location, error) {
 	s.mu.Lock()
 	conn := s.conn
 	doc := s.docs[path]
@@ -421,7 +487,7 @@ func (s *Session) Definition(path string, offset int) ([]Location, error) {
 		return nil, fmt.Errorf("javalang: %s is not open", path)
 	}
 	var raw json.RawMessage
-	if err := conn.Call("textDocument/definition", positionParams{
+	if err := conn.Call(method, positionParams{
 		TextDocument: uriDocument{URI: fileURI(path)},
 		Position:     positionAt(doc.newest(), offset),
 	}, &raw); err != nil {
@@ -442,6 +508,9 @@ func (s *Session) BuildFilesChanged(paths ...string) error {
 	if len(paths) == 0 {
 		return nil
 	}
+	s.mu.Lock()
+	s.dropImplementations()
+	s.mu.Unlock()
 	changes := make([]fileChange, len(paths))
 	for i, path := range paths {
 		changes[i] = fileChange{URI: fileURI(path), Type: 2}

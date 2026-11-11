@@ -10,12 +10,13 @@ import (
 // but does nothing yet.
 func (a *App) keyActions() map[string]func() {
 	return map[string]func(){
-		"closeTab":       a.CloseActive,
-		"closeOtherTabs": a.CloseOtherTabs,
-		"nextTab":        a.NextTab,
-		"prevTab":        a.PrevTab,
-		"findFile":       a.OpenFilePalette,
-		"findInFiles":    a.OpenFindInFiles,
+		"closeTab":           a.CloseActive,
+		"closeOtherTabs":     a.CloseOtherTabs,
+		"nextTab":            a.NextTab,
+		"prevTab":            a.PrevTab,
+		"findFile":           a.OpenFilePalette,
+		"findInFiles":        a.OpenFindInFiles,
+		"goToImplementation": a.GoToImplementation,
 	}
 }
 

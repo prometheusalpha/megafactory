@@ -297,3 +297,49 @@ public class Bad extends Object {
 		t.Errorf("Java 21 code has errors: %q", errs[URI(good)])
 	}
 }
+
+func TestCommandLombokAgent(t *testing.T) {
+	cfg, _ := install(t)
+	cmd, err := Command(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range cmd.Args {
+		if strings.HasPrefix(a, "-javaagent") {
+			t.Errorf("agent %s without Lombok", a)
+		}
+	}
+	cfg.Lombok = "/servers/lombok.jar"
+	cmd, _ = Command(cfg)
+	i := slices.Index(cmd.Args, "-javaagent:/servers/lombok.jar")
+	// The JVM reads its options up to the jar.
+	if i < 0 || i > slices.Index(cmd.Args, "-jar") {
+		t.Errorf("args %q", cmd.Args)
+	}
+}
+
+func TestUsesLombok(t *testing.T) {
+	write := func(root, name, body string) {
+		p := filepath.Join(root, name)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(body), 0o644)
+	}
+	plain := t.TempDir()
+	write(plain, "pom.xml", "<artifactId>spring-boot</artifactId>")
+	// A target folder's copy of a pom is not the project's.
+	write(plain, "target/pom.xml", "lombok")
+	if UsesLombok(plain) {
+		t.Error("Lombok in a project without it")
+	}
+	top := t.TempDir()
+	write(top, "build.gradle", "compileOnly 'org.projectlombok:lombok:1.18'")
+	if !UsesLombok(top) {
+		t.Error("Lombok in build.gradle missed")
+	}
+	module := t.TempDir()
+	write(module, "pom.xml", "<modules/>")
+	write(module, "svc/api/pom.xml", "<artifactId>Lombok</artifactId>")
+	if !UsesLombok(module) {
+		t.Error("Lombok in a module missed")
+	}
+}

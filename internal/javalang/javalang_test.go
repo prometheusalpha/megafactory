@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -589,4 +590,54 @@ func TestAnswersServerRequests(t *testing.T) {
 	if err := h.remote.Call("client/registerCapability", map[string]any{}, &ignored); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestImplementationIsKeptUntilTheCodeChanges(t *testing.T) {
+	h := newHarness(t, `{"textDocumentSync":{"change":2}}`)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "A.java")
+	target := filepath.Join(dir, "B.java")
+	os.WriteFile(target, []byte("class B {}\n"), 0o644)
+	if err := h.session.Open(path, "java", newText(1, "class A {}\n")); err != nil {
+		t.Fatal(err)
+	}
+	h.next(t)
+	var asked atomic.Int32
+	h.fake.respond(func(method string, params json.RawMessage) any {
+		if method != "textDocument/implementation" {
+			return nil
+		}
+		asked.Add(1)
+		return []map[string]any{{
+			"uri": fileURI(target),
+			"range": map[string]any{
+				"start": map[string]int{"line": 0, "character": 6},
+				"end":   map[string]int{"line": 0, "character": 7},
+			},
+		}}
+	})
+	ask := func(want int32, why string) {
+		t.Helper()
+		locs, err := h.session.Implementation(path, 6)
+		if err != nil || len(locs) != 1 || locs[0].Path != target {
+			t.Fatalf("%s: %+v, %v", why, locs, err)
+		}
+		if got := asked.Load(); got != want {
+			t.Fatalf("%s: server asked %d times, want %d", why, got, want)
+		}
+	}
+	ask(1, "first")
+	ask(1, "again")
+	// A change anywhere may add an implementation.
+	if err := h.session.Change(path, newText(2, "class A extends X {}\n")); err != nil {
+		t.Fatal(err)
+	}
+	h.next(t)
+	ask(2, "after a change")
+	ask(2, "kept again")
+	if err := h.session.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	h.next(t)
+	ask(3, "after a save")
 }
