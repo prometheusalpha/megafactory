@@ -254,7 +254,6 @@ func (a *App) View(c *ui.Context) {
 		c.OnShortcut(ui.Cmd, ui.KeyB, func() { a.showSidebar = !a.showSidebar })
 		c.OnShortcut(ui.Cmd, ui.KeyJ, func() { a.showBottom = !a.showBottom })
 		c.OnShortcut(ui.Cmd, ui.KeyO, a.OpenFolder)
-		c.OnShortcut(ui.Cmd|ui.Shift, ui.KeyO, a.OpenRecentPalette)
 		c.OnShortcut(ui.Cmd, ui.KeyComma, a.openSettings)
 		// On macOS the File menu takes these first, and does the same.
 		c.OnShortcut(ui.Cmd, ui.KeyS, a.SaveActive)
@@ -335,7 +334,7 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 		if a.root != nil {
 			label = a.root.name
 		}
-		if chip(c, k, "folder-open", label).Tooltip("Recent Projects  ⌘⇧O").Clicked() {
+		if chip(c, k, "folder-open", label).Tooltip(shortcutTip("Recent Projects", a.keys.Binding("recentProjects"))).Clicked() {
 			a.OpenRecentPalette()
 		}
 		if a.root != nil {

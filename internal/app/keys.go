@@ -16,6 +16,7 @@ func (a *App) keyActions() map[string]func() {
 		"prevTab":        a.PrevTab,
 		"findFile":       a.OpenFilePalette,
 		"findInFiles":    a.OpenFindInFiles,
+		"recentProjects": a.OpenRecentPalette,
 	}
 }
 
@@ -64,4 +65,12 @@ func (a *App) shortcutOf(it *ui.MenuItem, id string) *ui.MenuItem {
 		return it.Shortcut(b.Mods, b.Key)
 	}
 	return it
+}
+
+// shortcutTip is a tooltip's text with the key its action has now, if any.
+func shortcutTip(text string, b keymap.Binding) string {
+	if b.Zero() {
+		return text
+	}
+	return text + "  " + b.Label()
 }
