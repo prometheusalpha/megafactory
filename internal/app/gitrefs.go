@@ -1,17 +1,17 @@
 package app
 
 import (
-	"strings"
+	"strconv"
 
 	"megafactory/internal/git"
 
 	"github.com/egoist/mygo/ui"
 )
 
-// branchPicker is the searchable Branches dialog: it lists the local,
-// remote and tag refs and offers to create a branch or check out a raw
-// revision. sel is the chosen row of the flat items list; shown is the row
-// last scrolled into view, so keys move it only once per selection.
+// branchPicker is the searchable Branches dialog: it lists the recent,
+// local, remote and tag refs as trees and offers to create a branch or check
+// out a raw revision. sel is the chosen row of the flat items list; shown is
+// the row last scrolled into view, so keys move it only once per selection.
 type branchPicker struct {
 	open  bool
 	query string
@@ -20,6 +20,12 @@ type branchPicker struct {
 	// creating reveals the new-branch name input in place of the search.
 	creating bool
 	newName  string
+	// recent is what the reflog says HEAD moved to, newest first; it fills in
+	// after the dialog is already open.
+	recent []string
+	// toggled holds the folders and sections the user flipped away from
+	// their default (see openByDefault).
+	toggled map[string]bool
 }
 
 // checkoutPrompt remembers a checkout git refused, so the stash-and-retry
@@ -37,71 +43,50 @@ func (p *checkoutPrompt) run(repo git.Repo) error {
 	return repo.Checkout(p.ref)
 }
 
-// pickerItem is a selectable row. An empty action marks a ref row; the
-// group names the dim header the row is listed under.
-type pickerItem struct {
-	group  string
-	ref    git.Ref
-	action string
-	label  string
-}
+// recentLimit caps the Recent section.
+const recentLimit = 5
 
+// openBranchPicker shows the dialog at once and fills the refs in when git
+// answers. Mounting it from that background callback instead left the search
+// box with a caret that took no typed text (seen in the app; the headless
+// tester doesn't reproduce it), unlike the palettes, which open in the click.
 func (a *App) openBranchPicker() {
 	if !a.git.ok {
 		return
 	}
+	p := &branchPicker{open: true, shown: -1}
+	a.git.picker = p
 	repo, project := a.git.repo, a.project
 	a.host.Run(func() func() {
 		refs, err := repo.Refs()
+		var recent []string
+		if err == nil {
+			recent, _ = repo.RecentBranches()
+		}
 		return func() {
-			if a.project != project || a.git.repo.Dir != repo.Dir {
+			if a.project != project || a.git.picker != p {
 				return
 			}
 			if err != nil {
 				a.host.ShowError("Couldn't load branches", err.Error())
 			}
 			a.git.refs = refs
-			a.git.picker = &branchPicker{open: true, shown: -1}
+			p.recent = recent
 		}
 	})
 }
 
-func (a *App) pickerItems(p *branchPicker) []pickerItem {
-	q := strings.ToLower(p.query)
-	match := func(s string) bool {
-		return q == "" || strings.Contains(strings.ToLower(s), q)
-	}
-	groups := []struct {
-		title string
-		kind  git.RefKind
-	}{
-		{"Local Branches", git.LocalBranch},
-		{"Remote Branches", git.RemoteBranch},
-		{"Tags", git.Tag},
-	}
-	var items []pickerItem
-	for _, g := range groups {
-		for _, r := range a.git.refs {
-			if r.Kind == g.kind && match(r.Name) {
-				items = append(items, pickerItem{group: g.title, ref: r, label: r.Name})
-			}
-		}
-	}
-	if q == "" || match("Create new branch from HEAD") {
-		items = append(items, pickerItem{group: "Actions", action: "create", label: "Create new branch from HEAD…"})
-	}
-	if q != "" {
-		items = append(items, pickerItem{group: "Actions", action: "revision", label: "Checkout revision " + p.query + "…"})
-	}
-	return items
-}
-
 func (a *App) pickerChoose(p *branchPicker, it pickerItem) {
-	switch it.action {
-	case "create":
+	switch {
+	case it.kind == itemFolder || it.kind == itemSection:
+		if p.toggled == nil {
+			p.toggled = map[string]bool{}
+		}
+		p.toggled[it.key] = !p.toggled[it.key]
+	case it.action == "create":
 		p.creating = true
 		p.newName = ""
-	case "revision":
+	case it.action == "revision":
 		a.checkoutRevision(p.query)
 	default:
 		a.checkoutRef(it.ref)
@@ -170,14 +155,7 @@ func (a *App) branchPickerView(c *ui.Context, k *colors) {
 			}
 			ui.Divider(c)
 			ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
-				group := ""
 				for i, it := range items {
-					if it.group != group {
-						group = it.group
-						c.Key("group:" + group)
-						ui.Text(c, group).FontSize(11).FontWeight(600).
-							TextColor(k.textFaint).Padding(8, 10, 2, 10).SingleLine()
-					}
 					a.pickerRow(c, k, p, i, it)
 				}
 			})
@@ -189,8 +167,12 @@ func (a *App) branchPickerView(c *ui.Context, k *colors) {
 }
 
 func (a *App) pickerRow(c *ui.Context, k *colors, p *branchPicker, i int, it pickerItem) {
-	c.Key(i)
-	row := ui.Row(c).Height(36).Padding(0, 6, 0, 10).Gap(10).Radius(9).AlignItems(ui.Center).
+	c.Key(it.key)
+	height := float32(36)
+	if it.kind == itemSection {
+		height = 30
+	}
+	row := ui.Row(c).Height(height).Padding(0, 6, 0, 10+16*float32(it.depth)).Gap(10).Radius(9).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Role(ui.RoleButton)
 	if i == p.sel {
 		row.Background(k.selected)
@@ -202,14 +184,34 @@ func (a *App) pickerRow(c *ui.Context, k *colors, p *branchPicker, i int, it pic
 		row.Background(k.hover)
 	}
 	iconName := "git-branch"
-	switch it.action {
-	case "create":
+	switch {
+	case it.kind == itemFolder || it.kind == itemSection:
+		iconName = "chevron-right"
+		if it.open {
+			iconName = "chevron-down"
+		}
+	case it.action == "create":
 		iconName = "plus"
-	case "revision":
+	case it.action == "revision":
 		iconName = "chevron-right"
 	}
-	row.Label(it.label).Children(func() {
-		ui.Icon(c, icon(iconName)).Size(16, 16).TextColor(k.iconMuted)
+	// A branch is read by its full name, though the tree lists only its leaf.
+	label := it.label
+	if it.kind == itemRef {
+		label = it.ref.Name
+	}
+	row.Label(label).Children(func() {
+		iconColor := k.iconMuted
+		if it.kind == itemSection {
+			iconColor = k.textFaint
+		}
+		ui.Icon(c, icon(iconName)).Size(16, 16).TextColor(iconColor)
+		if it.kind == itemSection {
+			ui.Text(c, it.label).FontSize(11).FontWeight(600).TextColor(k.textFaint).SingleLine()
+			ui.Spacer(c)
+			ui.Text(c, strconv.Itoa(it.count)).FontSize(11).TextColor(k.textFaint).SingleLine()
+			return
+		}
 		ui.Text(c, it.label).FontSize(13).TextColor(k.text).SingleLine()
 		ui.Spacer(c)
 	})
@@ -285,6 +287,27 @@ func (a *App) runCheckout(p *checkoutPrompt) {
 					}
 				})
 			})
+		}
+	})
+}
+
+// requestCreateBranch creates the branch unless its name differs from an
+// existing one only in letter case, which it first asks about.
+func (a *App) requestCreateBranch(name string) {
+	clash := caseClash(name, a.git.refs)
+	if clash == "" {
+		a.createBranch(name)
+		return
+	}
+	a.host.Ask(Question{
+		Message: "Branch name differs only by letter case",
+		Detail: "“" + name + "” and the existing branch “" + clash + "” differ only in upper and lower case. " +
+			"On a case-insensitive file system, the macOS default, git may fail to create it or overwrite the other branch.",
+		Buttons:     []string{"Create Anyway", "Cancel"},
+		Destructive: -1,
+	}, func(btn int) {
+		if btn == 0 {
+			a.createBranch(name)
 		}
 	})
 }

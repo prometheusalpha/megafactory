@@ -341,7 +341,9 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 			a.OpenRecentPalette()
 		}
 		if a.root != nil {
-			chip(c, k, "git-branch", a.branch).Tooltip("Branches")
+			if chip(c, k, "git-branch", a.branch).Tooltip("Branches").Clicked() {
+				a.clickBranch()
+			}
 		}
 		ui.Spacer(c)
 		a.runConfigSelect(c, k)

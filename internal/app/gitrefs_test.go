@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -81,8 +82,19 @@ func TestBranchPickerListsAndFilters(t *testing.T) {
 	if a.git.picker == nil || !a.git.picker.open {
 		t.Fatal("branch picker did not open")
 	}
-	// The dialog title, the local branches and the tag are all listed.
-	for _, want := range []string{"Branches", "main", "feature", "v1"} {
+	// Sections start collapsed, so only their headers are listed.
+	for _, want := range []string{"Branches", "Local Branches", "Remote Branches · origin", "Tags"} {
+		if !tt.HasText(want) {
+			t.Errorf("picker does not show %q", want)
+		}
+	}
+	if tt.HasText("v1") {
+		t.Error("tags listed under a collapsed section")
+	}
+	// Opening the sections lists the local branches and the tag.
+	a.git.picker.toggled = map[string]bool{"sec:local": true, "sec:tags": true}
+	tt.Frame()
+	for _, want := range []string{"main", "feature", "v1"} {
 		if !tt.HasText(want) {
 			t.Errorf("picker does not show %q", want)
 		}
@@ -198,5 +210,161 @@ func TestCheckoutStashesDirtyTree(t *testing.T) {
 	// gitRefresh applied the new state after the checkout succeeded.
 	if a.branch == "dev" {
 		t.Error("gitRefresh did not run after the checkout")
+	}
+}
+
+// labels flattens items to "depth:label" strings, section and folder rows
+// marked with a trailing slash, to compare whole trees at once.
+func labels(items []pickerItem) []string {
+	var out []string
+	for _, it := range items {
+		l := strings.Repeat(" ", it.depth) + it.label
+		if it.kind == itemSection || it.kind == itemFolder {
+			l += "/"
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
+func treeApp(refs ...git.Ref) (*App, *branchPicker) {
+	a := newApp(defaultState)
+	a.git.refs = refs
+	return a, &branchPicker{open: true}
+}
+
+func local(name string) git.Ref {
+	return git.Ref{Name: name, Full: "refs/heads/" + name, Kind: git.LocalBranch}
+}
+
+func remote(name string) git.Ref {
+	return git.Ref{Name: name, Full: "refs/remotes/" + name, Kind: git.RemoteBranch}
+}
+
+func TestPickerTreeGroupsBySlash(t *testing.T) {
+	a, p := treeApp(local("main"), local("feat/a/b"), local("feat/a/c"), local("feat/d"),
+		remote("origin/feat/a/b"), remote("upstream/x"))
+	// Everything starts collapsed: the sections only.
+	got := labels(a.pickerItems(p))
+	want := []string{"Local Branches/", "Remote Branches · origin/", "Remote Branches · upstream/", "Create new branch from HEAD…"}
+	if !slices.Equal(got, want) {
+		t.Errorf("collapsed = %q, want %q", got, want)
+	}
+	// Opening Local lists folders before branches, each folder collapsed.
+	p.toggled = map[string]bool{"sec:local": true}
+	got = labels(a.pickerItems(p))
+	want = []string{"Local Branches/", " feat/", " main", "Remote Branches · origin/"}
+	if len(got) < 4 || !slices.Equal(got[:4], want) {
+		t.Errorf("local opened = %q, want %q first", got, want)
+	}
+	// a/b/c is a tree: feat -> a -> b.
+	p.toggled["dir:sec:local\x00feat"] = true
+	p.toggled["dir:sec:local\x00feat/a"] = true
+	got = labels(a.pickerItems(p))
+	want = []string{"Local Branches/", " feat/", "  a/", "   b", "   c", "  d", " main"}
+	if len(got) < len(want) || !slices.Equal(got[:len(want)], want) {
+		t.Errorf("feat opened = %q, want %q first", got, want)
+	}
+	// A remote's section drops the remote's name from its branches.
+	p.toggled["sec:remote:upstream"] = true
+	for _, l := range labels(a.pickerItems(p)) {
+		if l == " upstream/" || l == " x" {
+			return
+		}
+	}
+	t.Errorf("upstream section lists no x: %q", labels(a.pickerItems(p)))
+}
+
+func TestPickerSearchOpensEverythingMatching(t *testing.T) {
+	a, p := treeApp(local("main"), local("feat/a/b"), remote("origin/feat/a/zed"))
+	p.query = "FEAT/A"
+	got := labels(a.pickerItems(p))
+	want := []string{
+		"Local Branches/", " feat/", "  a/", "   b",
+		"Remote Branches · origin/", " feat/", "  a/", "   zed",
+		// "Create new branch" does not match the query: only the revision
+		// action follows the refs.
+		"Checkout revision FEAT/A…",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("search = %q, want %q", got, want)
+	}
+}
+
+// Foo and foo are different branches to git, so the tree keeps them apart.
+func TestPickerTreeKeepsCaseVariantsApart(t *testing.T) {
+	a, p := treeApp(local("Foo/x"), local("foo/y"))
+	p.toggled = map[string]bool{"sec:local": true}
+	got := labels(a.pickerItems(p))
+	if got[1] != " Foo/" || got[2] != " foo/" {
+		t.Errorf("case variants merged or lost: %q", got)
+	}
+	// Searching in lower case still finds both.
+	p.query = "foo"
+	if got := labels(a.pickerItems(p)); !slices.Equal(got[:6], []string{"Local Branches/", " Foo/", "  x", " foo/", "  y", "Checkout revision foo…"}) {
+		t.Errorf("search = %q", got)
+	}
+}
+
+func TestPickerRecentIsOpenAndSkipsCurrent(t *testing.T) {
+	a, p := treeApp(local("main"), local("feature"), local("old"))
+	a.branch = "main"
+	p.recent = []string{"main", "feature", "gone", "old"}
+	got := labels(a.pickerItems(p))
+	if !slices.Equal(got[:3], []string{"Recent/", " feature", " old"}) {
+		t.Errorf("recent = %q", got)
+	}
+	// While searching, Recent stays out: Local lists those branches.
+	p.query = "feature"
+	if got := labels(a.pickerItems(p)); got[0] != "Local Branches/" {
+		t.Errorf("search listed Recent: %q", got)
+	}
+}
+
+func TestCaseClash(t *testing.T) {
+	refs := []git.Ref{local("feature/x"), local("Main"), remote("origin/Remote")}
+	for name, want := range map[string]string{
+		"main":         "Main",
+		"Feature/y":    "feature/x",
+		"feature/X":    "feature/x",
+		"feature/x":    "", // same name: git itself refuses it
+		"feature":      "",
+		"other/Main":   "",
+		"remote":       "", // only local branches are files under refs/heads
+		"Main/sub":     "", // Main is a branch: git refuses the folder itself
+		"feature/x/yz": "",
+	} {
+		if got := caseClash(name, refs); got != want {
+			t.Errorf("caseClash(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestRequestCreateBranchAsksOnCaseClash(t *testing.T) {
+	dir := refsGitRepo(t)
+	a := refsTestApp(t, dir)
+	refs, err := a.git.repo.Refs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.git.refs = refs
+	var q Question
+	asked := 0
+	choice := 1 // Cancel
+	a.host.Ask = func(qq Question, done func(int)) {
+		asked, q = asked+1, qq
+		done(choice)
+	}
+	a.requestCreateBranch("Feature")
+	if asked != 1 || !strings.Contains(q.Detail, "“feature”") {
+		t.Fatalf("asked %d times, detail %q", asked, q.Detail)
+	}
+	if out := refsRunGit(t, dir, "branch", "--list", "Feature"); strings.TrimSpace(out) != "" {
+		t.Errorf("branch created despite Cancel: %q", out)
+	}
+	// An unrelated name needs no question.
+	a.requestCreateBranch("unrelated")
+	if asked != 1 {
+		t.Errorf("asked about a name with no clash")
 	}
 }

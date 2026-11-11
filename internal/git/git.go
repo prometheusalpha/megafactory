@@ -288,6 +288,29 @@ func (r Repo) Refs() ([]Ref, error) {
 	return refs, nil
 }
 
+// RecentBranches lists the branches HEAD moved to, newest first, from the
+// reflog's "checkout: moving from A to B" entries. Names are exact, so the
+// caller decides which still exist. A fresh clone has no checkouts to list.
+func (r Repo) RecentBranches() ([]string, error) {
+	out, err := r.run("reflog", "show", "--format=%gs", "-n", "500", "HEAD")
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, line := range strings.Split(string(out), "\n") {
+		rest, ok := strings.CutPrefix(line, "checkout: moving from ")
+		if !ok {
+			continue
+		}
+		_, to, ok := strings.Cut(rest, " to ")
+		if !ok || slices.Contains(names, to) {
+			continue
+		}
+		names = append(names, to)
+	}
+	return names, nil
+}
+
 // Checkout switches to a ref. Remote branches get a local tracking branch
 // whose name drops the remote's first path segment (origin/feature -> feature).
 func (r Repo) Checkout(ref Ref) error {
