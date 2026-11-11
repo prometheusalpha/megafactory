@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "out": "build",
   "macos": {
-    "signingIdentity": "Telepath Local Signing"
+    "signingIdentity": "Telepath Local Signing",
+    "entitlements": "entitlements.plist"
   }
 }
