@@ -75,3 +75,12 @@ func shortcutTip(text string, b keymap.Binding) string {
 	}
 	return text + "  " + b.Label()
 }
+
+// panelKeys is the keys that toggle the bottom panel, for a tooltip: the
+// fixed ⌘J, and the togglePanel binding unless it was left unbound.
+func (a *App) panelKeys() string {
+	if b := a.keys.Binding("togglePanel"); !b.Zero() {
+		return "⌘J · " + b.Label()
+	}
+	return "⌘J"
+}

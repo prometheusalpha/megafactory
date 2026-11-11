@@ -117,7 +117,7 @@ func TestSettingsChangeTheme(t *testing.T) {
 
 func TestHideBottomPanel(t *testing.T) {
 	a, tt := openSample(t)
-	click(t, tt, "Hide Panel  ⌘J · Ctrl+`")
+	click(t, tt, "Hide Panel  ⌘J · ⌃`")
 	if a.showBottom || tt.HasText("Terminal") {
 		t.Errorf("panel still shown: %v", a.showBottom)
 	}

@@ -308,7 +308,7 @@ func TestInlineErrorsSetting(t *testing.T) {
 		t.Fatalf("inlays %d, want 1", n)
 	}
 	// The panel takes the room the Java section would need.
-	click(t, tt, "Hide Panel  ⌘J · Ctrl+`", "Settings  ⌘,", "Show problems inline")
+	click(t, tt, "Hide Panel  ⌘J · ⌃`", "Settings  ⌘,", "Show problems inline")
 	tt.Frame()
 	if prefs.InlineErrors || len(a.java.inlays[demoRel]) != 0 {
 		t.Errorf("setting %v, inlays %d", prefs.InlineErrors, len(a.java.inlays[demoRel]))
