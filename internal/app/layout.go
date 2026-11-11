@@ -44,6 +44,9 @@ type tab struct {
 	// Diff tabs have no ed; they show a DiffState instead.
 	diff    *editor.DiffState
 	diffRel string
+	// autoVer is the version of the text autosave last saw modified, so
+	// that each edit schedules its save once.
+	autoVer uint64
 }
 
 const settingsPath = "megafactory:settings"
@@ -255,6 +258,7 @@ func (a *App) View(c *ui.Context) {
 	a.followActiveTab()
 	a.saveSession()
 	a.debugFrame()
+	a.autoSaveFrame()
 	// While the settings page waits for a key, none is a shortcut.
 	if !a.Recording() {
 		c.OnShortcut(ui.Cmd, ui.KeyB, func() { a.showSidebar = !a.showSidebar })

@@ -34,12 +34,16 @@ type Settings struct {
 	// CompactFolders shows a chain of folders each holding only the next as
 	// one row in the project tree, as IntelliJ does its middle packages.
 	CompactFolders bool `json:"compactFolders"`
+	// AutoSave writes a modified file once AutoSaveDelay seconds have
+	// passed since its last edit.
+	AutoSave      bool    `json:"autoSave"`
+	AutoSaveDelay float32 `json:"autoSaveDelay"`
 	// Keymap holds the shortcuts the user rebound, by keymap.Action ID;
 	// an action not in it keeps its default.
 	Keymap map[string]string `json:"keymap,omitempty"`
 }
 
-var defaultSettings = Settings{EditorLineHeight: 1.5, TerminalLineHeight: 1.2, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: true, GutterBlame: false, CompactFolders: true}
+var defaultSettings = Settings{EditorLineHeight: 1.5, TerminalLineHeight: 1.2, Appearance: "system", Theme: "Default", InlineErrors: true, InlineBlame: true, GutterBlame: false, CompactFolders: true, AutoSave: true, AutoSaveDelay: 1}
 
 var prefs = defaultSettings
 

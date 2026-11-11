@@ -45,6 +45,9 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 					a.applyBlameSettings()
 				}
 			})
+			section(c, k, "Auto save", "Write a changed file once you stop typing.", func() {
+				a.autoSavePicker(c, k)
+			})
 			a.keymapSection(c, k)
 		})
 	})
