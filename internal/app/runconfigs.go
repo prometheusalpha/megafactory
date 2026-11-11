@@ -31,13 +31,13 @@ type runEditState struct {
 }
 
 func (a *App) runPath() string {
-	return filepath.Join(a.project, ".megafactory", "run.json")
+	return filepath.Join(a.project, ".idea", "megafactory_run.json")
 }
 
 func (a *App) loadRunConfigs() {
 	s, err := runcfg.Load(a.runPath())
 	if err != nil {
-		a.host.ShowError("Couldn't read run.json", err.Error())
+		a.host.ShowError("Couldn't read megafactory_run.json", err.Error())
 	}
 	a.runStore = s
 	a.runConfig = s.Selected()
@@ -49,7 +49,7 @@ func (a *App) saveRunConfigs() {
 		return
 	}
 	if err := a.runStore.Save(a.runPath()); err != nil {
-		a.host.ShowError("Couldn't save run.json", err.Error())
+		a.host.ShowError("Couldn't save megafactory_run.json", err.Error())
 	}
 }
 

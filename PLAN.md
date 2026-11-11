@@ -17,7 +17,7 @@ Java IDE native viết bằng Go trên MyGo (`github.com/egoist/mygo` v0.8.3, na
 | 9 | Theme | Mặc định là màu riêng của app; theme khác chọn trong Settings, embed từ repo gốc (bắt đầu với Catppuccin), không tự đọc theme Ghostty. Có System/Light/Dark |
 | 10 | File bị ignore | Không ẩn, hiện nhạt theo `git check-ignore` (tôn trọng `.gitignore`) |
 | 11 | Focus khi click file trong tree | Tạm thời: editor lấy focus; phím tắt tree với file chỉ dùng khi đi bằng phím mũi tên |
-| 12 | Breakpoint lưu ở đâu | `.megafactory/breakpoints.json`, dòng tính từ 1 như giao thức; sửa text thì dời breakpoint theo dòng |
+| 12 | Breakpoint lưu ở đâu | `.idea/megafactory_breakpoints.json`, dòng tính từ 1 như giao thức; sửa text thì dời breakpoint theo dòng |
 | 13 | Output của chương trình đang debug | `console: internalConsole` → ra Debug console của panel, không mở terminal cho java-debug (adapter không hỏi IDE mở terminal) |
 | 14 | Restart | java-debug 0.53.2 không có request `restart` của DAP → Restart = stop rồi chạy lại đúng config đó |
 
@@ -31,7 +31,7 @@ internal/workspace/   fs tree, file ops, fs watch
 internal/lsp/         JSON-RPC stdio client → jdtls
 internal/tabs/        documents: editor.Buffer + editor.State per file, dirty/save
 internal/git/         `git` CLI wrapper
-internal/runcfg/     run configurations: model, .megafactory/run.json, argv
+internal/runcfg/     run configurations: model, .idea/megafactory_run.json, argv
 internal/runner/      process lifetime, stdout/stderr lines, File.java:123 links
 internal/javalang/    LSP client → jdtls, resolveMainClass/resolveClasspath
 internal/dap/         DAP client → java-debug
@@ -94,7 +94,7 @@ Nguyên tắc: mọi I/O (jdtls, git, AI, process) chạy ngoài UI thread, đ�
 
 - [x] 4.1 Terminal bằng `plugins/terminal` (libghostty-vt), cwd = root project
 - [x] 4.2 Nhiều tab terminal, đóng/mở, rename
-- [x] 4.3 Run configurations: model + lưu `.megafactory/run.json`
+- [x] 4.3 Run configurations: model + lưu `.idea/megafactory_run.json`
 - [x] 4.4 Config type **Application**: main class, module, program args, VM options, env vars, working dir, JDK
 - [x] 4.5 Config type **Spring Boot**: như Application + active profiles (`-Dspring.profiles.active`)
 - [x] 4.6 Config type **Maven goal** / **Gradle task** / **Shell**

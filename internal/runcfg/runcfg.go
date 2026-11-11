@@ -1,5 +1,5 @@
 // Package runcfg owns the run-configuration model, its persistence in
-// .megafactory/run.json, and the one translation from a config to a command
+// .idea/megafactory_run.json, and the one translation from a config to a command
 // the runner can spawn. All knowledge that varies by kind lives in table.
 package runcfg
 

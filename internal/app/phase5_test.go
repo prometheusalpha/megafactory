@@ -278,7 +278,7 @@ func TestBreakpointTogglesOnGutterClickAndPersists(t *testing.T) {
 	if len(active.ed.GutterMarks) != 2 || active.ed.GutterMarks[1].Line != 3 {
 		t.Errorf("gutter marks %+v", active.ed.GutterMarks)
 	}
-	on, err := dap.LoadBreakpoints(filepath.Join(a.project, ".megafactory", "breakpoints.json"))
+	on, err := dap.LoadBreakpoints(filepath.Join(a.project, ".idea", "megafactory_breakpoints.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -265,7 +265,7 @@ func (a *App) stackRel(file string) (string, bool) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "target", "build", "node_modules", ".megafactory":
+			case ".git", "target", "build", "node_modules", ".idea":
 				return filepath.SkipDir
 			}
 			return nil

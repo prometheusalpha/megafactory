@@ -96,7 +96,7 @@ func TestValidateRejectsIncompleteConfigs(t *testing.T) {
 }
 
 func TestStoreRoundTripAndCRUD(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".megafactory", "run.json")
+	path := filepath.Join(t.TempDir(), ".idea", "megafactory_run.json")
 	s, err := Load(path)
 	if err != nil || len(s.All()) != 0 {
 		t.Fatalf("missing file: %v %v", err, s.All())
@@ -135,7 +135,7 @@ func TestStoreRoundTripAndCRUD(t *testing.T) {
 }
 
 func TestLoadToleratesUnknownFieldsAndDropsInvalid(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "run.json")
+	path := filepath.Join(t.TempDir(), "megafactory_run.json")
 	data := `{"configs":[{"id":"1","name":"App","kind":"application","mainClass":"A","unknown":42},
 	 {"id":"2","name":"Bad","kind":"maven"}],"selected":"1","extra":true}`
 	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
@@ -170,7 +170,7 @@ func TestSpecsCoverEveryKindWithFields(t *testing.T) {
 }
 
 func TestUpsertAfterReloadDoesNotReuseDeletedID(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "run.json")
+	path := filepath.Join(t.TempDir(), "megafactory_run.json")
 	s, _ := Load(path)
 	first, _ := s.Upsert(Config{Name: "One", Kind: Shell, Command: "echo 1"})
 	second, _ := s.Upsert(Config{Name: "Two", Kind: Shell, Command: "echo 2"})

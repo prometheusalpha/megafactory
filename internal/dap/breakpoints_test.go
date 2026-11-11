@@ -31,7 +31,7 @@ func TestToggleSetsAndClears(t *testing.T) {
 // TestBreakpointsRoundTrip keeps them across sessions, and reads a missing
 // file as none.
 func TestBreakpointsRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".megafactory", "breakpoints.json")
+	path := filepath.Join(t.TempDir(), ".idea", "megafactory_breakpoints.json")
 	missing, err := LoadBreakpoints(path)
 	if err != nil || !missing.Empty() {
 		t.Fatalf("missing file: %v %v", err, missing.Files())

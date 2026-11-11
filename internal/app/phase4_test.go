@@ -102,7 +102,7 @@ func TestTerminalTabsOpenCloseRename(t *testing.T) {
 	}
 }
 
-// 4.3 A config saved through the dialog lands in .megafactory/run.json.
+// 4.3 A config saved through the dialog lands in .idea/megafactory_run.json.
 func TestRunConfigDialogPersists(t *testing.T) {
 	a, tt, _ := phase4App(t)
 	a.editConfigurations()
@@ -130,7 +130,7 @@ func TestRunConfigDialogPersists(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(f.Configs) != 1 || f.Configs[0].Name != "Say hi" || f.Configs[0].Command != "echo hi" {
-		t.Errorf("run.json %v", f.Configs)
+		t.Errorf("megafactory_run.json %v", f.Configs)
 	}
 	back, err := runcfg.Load(a.runPath())
 	if err != nil || len(back.All()) != 1 {
@@ -169,7 +169,7 @@ func TestRunConfigDuplicateAndDelete(t *testing.T) {
 	}
 	data, _ := os.ReadFile(a.runPath())
 	if strings.Contains(string(data), "App (copy)") {
-		t.Error("deleted config still in run.json")
+		t.Error("deleted config still in megafactory_run.json")
 	}
 }
 
@@ -370,7 +370,7 @@ func TestSelectingRunConfigPersistsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if back.Selected() != two.ID {
-		t.Errorf("run.json selected %q, want %q", back.Selected(), two.ID)
+		t.Errorf("megafactory_run.json selected %q, want %q", back.Selected(), two.ID)
 	}
 }
 
@@ -390,7 +390,7 @@ func TestDeletingSelectedConfigReselects(t *testing.T) {
 	}
 	back, _ := runcfg.Load(a.runPath())
 	if back.Selected() != two.ID {
-		t.Errorf("run.json selected %q, want the survivor %q", back.Selected(), two.ID)
+		t.Errorf("megafactory_run.json selected %q, want the survivor %q", back.Selected(), two.ID)
 	}
 }
 
