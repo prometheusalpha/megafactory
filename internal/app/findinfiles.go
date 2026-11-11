@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"path"
 
 	"megafactory/internal/search"
 
@@ -225,7 +226,9 @@ func (a *App) findRow(c *ui.Context, k *colors, p *findInFiles, i int, m search.
 			ui.Text(c, m.Text[from:to]).FontWeight(700).TextColor(c.Theme().Accent)
 			ui.Text(c, m.Text[to:]).TextColor(k.text)
 		})
-		ui.Text(c, fmt.Sprintf("%s:%d", m.Path, m.Line+1)).FontSize(11.5).TextColor(k.textMuted).
+		// The file name is what tells matches apart; the directories only
+		// crowd the line out, and the row's label still carries the path.
+		ui.Text(c, fmt.Sprintf("%s:%d", path.Base(m.Path), m.Line+1)).FontSize(11.5).TextColor(k.textMuted).
 			SingleLine().Ellipsis("…").MaxWidth(280)
 	})
 	row.OnClick(func() { choose(m) })
