@@ -259,6 +259,7 @@ func (a *App) View(c *ui.Context) {
 	if !a.Recording() {
 		c.OnShortcut(ui.Cmd, ui.KeyB, func() { a.showSidebar = !a.showSidebar })
 		c.OnShortcut(ui.Cmd, ui.KeyJ, func() { a.showBottom = !a.showBottom })
+		c.OnShortcut(ui.Ctrl, ui.KeyBackquote, func() { a.showBottom = !a.showBottom })
 		c.OnShortcut(ui.Cmd, ui.KeyO, a.OpenFolder)
 		c.OnShortcut(ui.Cmd, ui.KeyComma, a.openSettings)
 		// On macOS the File menu takes these first, and does the same.
@@ -370,7 +371,7 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 			if sync.Clicked() {
 				a.syncBuild()
 			}
-			if iconButton(c, k, "panel-bottom", "Toggle Panel  ⌘J", 30, 17).Clicked() {
+			if iconButton(c, k, "panel-bottom", "Toggle Panel  ⌘J · Ctrl+`", 30, 17).Clicked() {
 				a.showBottom = !a.showBottom
 			}
 			if iconButton(c, k, "settings-2", "Settings  ⌘,", 30, 16).Clicked() {
@@ -740,7 +741,7 @@ func (a *App) editorCard(c *ui.Context, k *colors) ui.Element {
 					return
 				}
 				ui.Text(c, "No file open").FontSize(16).FontWeight(600).TextColor(k.text)
-				ui.Text(c, "Open a file from the project tree · ⌘B sidebar · ⌘J panel").FontSize(12.5).TextColor(k.textMuted)
+				ui.Text(c, "Open a file from the project tree · ⌘B sidebar · ⌘J or Ctrl+` panel").FontSize(12.5).TextColor(k.textMuted)
 			})
 			return
 		}
@@ -864,7 +865,7 @@ func (a *App) bottomPanel(c *ui.Context, k *colors) ui.Element {
 				}
 			})
 			ui.Spacer(c)
-			if iconButton(c, k, "x", "Hide Panel  ⌘J", 26, 15).Clicked() {
+			if iconButton(c, k, "x", "Hide Panel  ⌘J · Ctrl+`", 26, 15).Clicked() {
 				a.showBottom = false
 			}
 		})

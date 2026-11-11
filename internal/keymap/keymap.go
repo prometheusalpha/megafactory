@@ -48,6 +48,7 @@ var Fixed = []struct {
 	{"Open Folder", Binding{ui.Cmd, ui.KeyO}},
 	{"Toggle Sidebar", Binding{ui.Cmd, ui.KeyB}},
 	{"Toggle Panel", Binding{ui.Cmd, ui.KeyJ}},
+	{"Toggle Panel (Terminal)", Binding{ui.Ctrl, ui.KeyBackquote}},
 	{"Settings", Binding{ui.Cmd, ui.KeyComma}},
 	{"Cut", Binding{ui.Cmd, ui.KeyX}},
 	{"Copy", Binding{ui.Cmd, ui.KeyC}},

@@ -117,7 +117,7 @@ func TestSettingsChangeTheme(t *testing.T) {
 
 func TestHideBottomPanel(t *testing.T) {
 	a, tt := openSample(t)
-	click(t, tt, "Hide Panel  ⌘J")
+	click(t, tt, "Hide Panel  ⌘J · Ctrl+`")
 	if a.showBottom || tt.HasText("Terminal") {
 		t.Errorf("panel still shown: %v", a.showBottom)
 	}
@@ -753,5 +753,18 @@ func TestReopenedProjectRestoresTabs(t *testing.T) {
 	a.OpenProject(proj)
 	if len(a.tabs) != 2 || a.tabs[0].name != "DemoApplication.java" || a.tabs[a.active].name != "pom.xml" {
 		t.Fatalf("restored %d tabs, active %d", len(a.tabs), a.active)
+	}
+}
+
+func TestCtrlBackquoteTogglesBottomPanel(t *testing.T) {
+	a, tt := openSample(t)
+	was := a.showBottom
+	tt.Key(ui.Ctrl, ui.KeyBackquote)
+	if a.showBottom == was {
+		t.Errorf("Ctrl+` left the panel as it was: %v", was)
+	}
+	tt.Key(ui.Ctrl, ui.KeyBackquote)
+	if a.showBottom != was {
+		t.Errorf("Ctrl+` twice: panel %v, want %v", a.showBottom, was)
 	}
 }
