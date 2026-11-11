@@ -14,6 +14,8 @@ import (
 // OpenProject replaces the open project with the folder at dir, and its
 // tabs with none: switchProject asked to save them.
 func (a *App) OpenProject(dir string) {
+	// The tabs of the project left, as the last frame may not have.
+	a.saveSession()
 	if a.stopWatch != nil {
 		a.stopWatch()
 	}
@@ -37,6 +39,7 @@ func (a *App) OpenProject(dir string) {
 		}
 	})
 	a.loadDir(a.root)
+	a.restoreTabs(a.sess.store[dir])
 	SaveState(a.State())
 	a.setRecent(recent.Add(a.recent, dir))
 }

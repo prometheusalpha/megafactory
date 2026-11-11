@@ -740,3 +740,18 @@ func TestTreeFollowsActiveTab(t *testing.T) {
 		t.Errorf("selected %q on the settings tab", a.selected)
 	}
 }
+
+func TestReopenedProjectRestoresTabs(t *testing.T) {
+	a, tt := openSample(t)
+	proj := a.project
+	click(t, tt, "src", "main", "java", "com", "example", "demo", "DemoApplication.java", "pom.xml")
+	a.saveSession()
+	a.OpenProject(t.TempDir())
+	if len(a.tabs) != 0 {
+		t.Fatalf("other project kept %d tabs", len(a.tabs))
+	}
+	a.OpenProject(proj)
+	if len(a.tabs) != 2 || a.tabs[0].name != "DemoApplication.java" || a.tabs[a.active].name != "pom.xml" {
+		t.Fatalf("restored %d tabs, active %d", len(a.tabs), a.active)
+	}
+}

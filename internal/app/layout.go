@@ -146,6 +146,7 @@ type App struct {
 	mainClasses []javalang.MainClass
 
 	recent  []string // the projects opened last, the most recent first
+	sess    sessionState
 	palette *recentPalette
 	files   *filePalette
 	findIn  *findInFiles
@@ -222,6 +223,7 @@ func New(st State, s Settings) *App {
 	prefs, themes = s, themeNamed(s.Theme)
 	a := newApp(st)
 	a.recent = loadRecent()
+	a.sess.store = loadSessions()
 	a.servers = servers{artifacts: setup.Artifacts, client: http.DefaultClient}
 	a.java.starter = startLanguageServer(a)
 	return a
@@ -251,6 +253,7 @@ func (a *App) View(c *ui.Context) {
 	a.javaFrame()
 	a.gitFrame()
 	a.followActiveTab()
+	a.saveSession()
 	a.debugFrame()
 	// While the settings page waits for a key, none is a shortcut.
 	if !a.Recording() {
@@ -678,18 +681,23 @@ func (a *App) openFile(n *node) {
 			if a.activate(n.path) {
 				return
 			}
-			buf := editor.NewBuffer(string(data))
-			buf.SetLanguage(languageFor(n.name))
-			// Diagnostics or inlays may build the editor before its first
-			// frame, which takes the style then and not again.
-			ed := &editor.State{Buffer: buf, WrapGuides: []int{120}, Font: code.editorFont(), LineHeight: prefs.EditorLineHeight}
-			t := &tab{path: n.path, name: n.name, ed: ed}
-			a.tabs = append(a.tabs, t)
-			a.active = len(a.tabs) - 1
-			a.javaTabOpened(t)
-			a.gitTabOpened(t)
+			a.addFileTab(n.path, n.name, data)
 		}
 	})
+}
+
+// addFileTab opens a tab on a file's text, and makes it the active one.
+func (a *App) addFileTab(rel, name string, data []byte) {
+	buf := editor.NewBuffer(string(data))
+	buf.SetLanguage(languageFor(name))
+	// Diagnostics or inlays may build the editor before its first
+	// frame, which takes the style then and not again.
+	ed := &editor.State{Buffer: buf, WrapGuides: []int{120}, Font: code.editorFont(), LineHeight: prefs.EditorLineHeight}
+	t := &tab{path: rel, name: name, ed: ed}
+	a.tabs = append(a.tabs, t)
+	a.active = len(a.tabs) - 1
+	a.javaTabOpened(t)
+	a.gitTabOpened(t)
 }
 
 func (a *App) openSettings() {
