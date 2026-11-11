@@ -195,10 +195,13 @@ func TestRunConsoleStreamsAndStackLink(t *testing.T) {
 	if !a.runConsole.done {
 		t.Error("the run did not end")
 	}
-	if !tt.HasText("running") {
-		t.Errorf("console text missing: %v", tt.Texts())
+	// The output is one read-only editor, so its text is the buffer's and a
+	// Cmd+click on the reference is the editor's go-to-definition.
+	text := a.runConsole.ed.Buffer.String()
+	if !strings.HasPrefix(text, "running\nat com.example.demo") {
+		t.Errorf("console text %q", text)
 	}
-	click(t, tt, "DemoApplication.java:12")
+	a.runConsole.ed.OnDefinition(strings.Index(text, "DemoApplication.java:12") + 3)
 	tt.Frame()
 	if len(a.tabs) != 1 || a.tabs[0].path != demoRel {
 		t.Fatalf("stack link did not open the file: %v", a.tabs)

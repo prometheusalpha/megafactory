@@ -181,7 +181,7 @@ func (a *App) launch(cmd runcfg.Command, name string, gen int) {
 	a.stopProc()
 	a.bottomTab = 0
 	a.showBottom = true
-	a.runConsole = &runConsoleState{name: name}
+	a.runConsole = newRunConsole(name, gen)
 	proc, err := a.host.StartProc(
 		runner.Spec{Argv: cmd.Argv, Dir: cmd.Dir, Env: cmd.Env},
 		func(l runner.Line) {
@@ -189,8 +189,7 @@ func (a *App) launch(cmd runcfg.Command, name string, gen int) {
 				if gen != a.runGen || a.runConsole == nil {
 					return
 				}
-				a.runConsole.lines = append(a.runConsole.lines,
-					consoleLine{text: l.Text, stderr: l.Stream == runner.Stderr})
+				a.runConsole.add(l.Text, l.Stream == runner.Stderr)
 			})
 		},
 		func(err error) {
