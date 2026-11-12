@@ -1031,6 +1031,17 @@ func (a *App) javaGoTo(t *tab, offset int, anyImpl bool) {
 		}
 		loc := locs[0]
 		data, _ := os.ReadFile(loc.Path)
+		// A MyBatis mapper's method has no implementation but its SQL,
+		// which is looked for first so as not to wait for jdtls's none.
+		if bodyless(data, loc.Start) && !here(loc) {
+			if it, ok := a.mapperStatement(loc, data); ok {
+				return func() {
+					if current() {
+						a.goToItem(it)
+					}
+				}
+			}
+		}
 		if anyImpl || bodyless(data, loc.Start) {
 			// jdtls takes about a minute for its first answer: the
 			// definition is what it goes to meanwhile, and the answer, kept,
@@ -1069,6 +1080,12 @@ func (a *App) javaGoTo(t *tab, offset int, anyImpl bool) {
 		})
 		refs, err := srv.References(file, offset)
 		items := a.goPlaces(refs)
+		// A mapper method's statement is a use of it the server can't see.
+		if bodyless(data, loc.Start) {
+			if it, ok := a.mapperStatement(loc, data); ok {
+				items = append([]picker.Item{it}, items...)
+			}
+		}
 		return func() {
 			// Escape on the list while it looked is a change of mind.
 			if !current() || loading && !t.ed.PopupShown() {

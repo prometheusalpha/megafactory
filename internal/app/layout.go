@@ -785,6 +785,9 @@ func (a *App) editorCard(c *ui.Context, k *colors) ui.Element {
 			cur.ed.OnCompletion = func(r editor.CompletionRequest) { a.javaComplete(cur, r) }
 			cur.ed.OnHover = func(r editor.HoverRequest) { a.javaHover(cur, r) }
 			cur.ed.OnDefinition = func(offset int) { a.javaDefinition(cur, offset) }
+		} else if isXMLPath(cur.path) {
+			// A MyBatis mapper's ids go to their methods.
+			cur.ed.OnDefinition = func(offset int) { a.mapperDefinition(cur, offset) }
 		}
 		a.wireGutter(c, cur.ed, cur)
 		// Each file keeps its own editor widget state (scroll, focus).
