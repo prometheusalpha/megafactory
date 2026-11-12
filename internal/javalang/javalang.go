@@ -437,6 +437,12 @@ func (s *Session) Definition(path string, offset int) ([]Location, error) {
 	return s.locationsAt("textDocument/definition", path, offset)
 }
 
+// References asks where the thing at offset is used, its declaration left
+// out. Anything not on disk is dropped.
+func (s *Session) References(path string, offset int) ([]Location, error) {
+	return s.locationsAt("textDocument/references", path, offset)
+}
+
 // Implementation asks where the method or type at offset is implemented:
 // the overriding methods of an interface's or abstract method, the
 // subtypes of a type. Anything not on disk is dropped.
@@ -487,10 +493,14 @@ func (s *Session) locationsAt(method, path string, offset int) ([]Location, erro
 		return nil, fmt.Errorf("javalang: %s is not open", path)
 	}
 	var raw json.RawMessage
-	if err := conn.Call(method, positionParams{
+	params := positionParams{
 		TextDocument: uriDocument{URI: fileURI(path)},
 		Position:     positionAt(doc.newest(), offset),
-	}, &raw); err != nil {
+	}
+	if method == "textDocument/references" {
+		params.Context = &referenceContext{}
+	}
+	if err := conn.Call(method, params, &raw); err != nil {
 		return nil, err
 	}
 	return s.locations(raw), nil
@@ -1089,6 +1099,12 @@ type didCloseParams struct {
 type positionParams struct {
 	TextDocument uriDocument `json:"textDocument"`
 	Position     position    `json:"position"`
+	// Context is references' only, which the protocol requires of them.
+	Context *referenceContext `json:"context,omitempty"`
+}
+
+type referenceContext struct {
+	IncludeDeclaration bool `json:"includeDeclaration"`
 }
 
 type watchedFiles struct {

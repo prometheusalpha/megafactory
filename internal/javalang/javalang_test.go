@@ -641,3 +641,44 @@ func TestImplementationIsKeptUntilTheCodeChanges(t *testing.T) {
 	h.next(t)
 	ask(3, "after a save")
 }
+
+// References leaves the declaration out, as a go to lists the usages
+// besides the place it was asked from.
+func TestReferencesLeaveTheDeclarationOut(t *testing.T) {
+	h := newHarness(t, `{"textDocumentSync":{"change":2}}`)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "A.java")
+	user := filepath.Join(dir, "B.java")
+	os.WriteFile(user, []byte("class B { A a; }\n"), 0o644)
+	if err := h.session.Open(path, "java", newText(1, "class A {}\n")); err != nil {
+		t.Fatal(err)
+	}
+	h.next(t)
+	var context atomic.Value
+	h.fake.respond(func(method string, params json.RawMessage) any {
+		if method != "textDocument/references" {
+			return nil
+		}
+		var p struct {
+			Context *struct {
+				IncludeDeclaration *bool `json:"includeDeclaration"`
+			} `json:"context"`
+		}
+		json.Unmarshal(params, &p)
+		context.Store(p.Context != nil && p.Context.IncludeDeclaration != nil && !*p.Context.IncludeDeclaration)
+		return []map[string]any{{
+			"uri": fileURI(user),
+			"range": map[string]any{
+				"start": map[string]int{"line": 0, "character": 10},
+				"end":   map[string]int{"line": 0, "character": 11},
+			},
+		}}
+	})
+	locs, err := h.session.References(path, 6)
+	if err != nil || len(locs) != 1 || locs[0].Path != user || locs[0].Start != 10 {
+		t.Fatalf("references %+v, %v", locs, err)
+	}
+	if ok, _ := context.Load().(bool); !ok {
+		t.Error("the request did not leave the declaration out")
+	}
+}

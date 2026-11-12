@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"megafactory/internal/javalang"
 	"megafactory/internal/jdk"
 	"megafactory/internal/jdtls"
+	"megafactory/internal/picker"
 	"megafactory/internal/setup"
 
 	"github.com/egoist/mygo/ui"
@@ -42,6 +42,7 @@ type langServer interface {
 	Hover(path string, offset int) (int, int, string, error)
 	Definition(path string, offset int) ([]javalang.Location, error)
 	Implementation(path string, offset int) ([]javalang.Location, error)
+	References(path string, offset int) ([]javalang.Location, error)
 	BuildFilesChanged(paths ...string) error
 	ResolveMainClasses() ([]javalang.MainClass, error)
 	ResolveClasspath(mainClass, projectName string) (modules, classes []string, err error)
@@ -974,14 +975,15 @@ func (a *App) javaHover(t *tab, r editor.HoverRequest) {
 
 // javaDefinition asks the server where the thing at the caret is defined,
 // and opens the first of its files, in the project. A method with no body,
-// an interface's or an abstract one's, is not where its code is: with
-// exactly one implementation in the project, as IntelliJ does, that is
-// where it goes.
+// an interface's or an abstract one's, is not where its code is: its
+// implementations in the project are, as IntelliJ goes, to the one or to a
+// list of them. On the declaration itself, where a go to would stay, it
+// lists the usages instead.
 func (a *App) javaDefinition(t *tab, offset int) { a.javaGoTo(t, offset, false) }
 
-// GoToImplementation goes to the one implementation of what the caret is
-// on, whatever kind of method it is; with none or several, to its
-// definition, as there is no list to choose from yet.
+// GoToImplementation goes to the implementations of what the caret is on,
+// whatever kind of method it is, as javaDefinition does of a method with
+// no body.
 func (a *App) GoToImplementation() {
 	if len(a.tabs) == 0 {
 		return
@@ -1005,6 +1007,12 @@ func (a *App) javaGoTo(t *tab, offset int, anyImpl bool) {
 	}
 	file := a.abs(t.path)
 	version := t.ed.Buffer.Version()
+	current := func() bool { return j.srv == srv && a.tabActive(t) && t.ed.Buffer.Version() == version }
+	// here is whether l is where the go to was asked from: the
+	// declaration's name, which the definition of a declaration is.
+	here := func(l javalang.Location) bool {
+		return filepath.Clean(l.Path) == filepath.Clean(file) && l.Start <= offset && offset <= l.End
+	}
 	a.host.Run(func() func() {
 		// Asked together: what the definition says decides whether the
 		// implementation counts, but not whether it is asked, and the
@@ -1032,24 +1040,41 @@ func (a *App) javaGoTo(t *tab, offset int, anyImpl bool) {
 			case impls = <-implsc:
 			case <-time.After(implementationWait):
 			}
-			if len(impls) == 1 {
-				if _, ok := a.relative(impls[0].Path); ok {
-					loc = impls[0]
-					data, _ = os.ReadFile(loc.Path)
+			// A class's own method is among its implementations.
+			impls = slices.DeleteFunc(impls, here)
+			if items := a.goPlaces(impls); len(items) > 0 {
+				return func() {
+					if current() {
+						a.showPicker(t, offset, &picker.List{Title: "Implementations", Items: items})
+					}
 				}
 			}
 		}
-		line := lineOfBytes(data, loc.Start)
-		col := loc.Start - (bytes.LastIndexByte(data[:min(max(loc.Start, 0), len(data))], '\n') + 1)
+		if !here(loc) {
+			items := a.goPlaces([]javalang.Location{loc})
+			return func() {
+				if current() && len(items) == 1 {
+					a.goToItem(items[0])
+				}
+			}
+		}
+		// On the declaration: the usages, which may take a while on a
+		// large project, so the list says it is looking meanwhile.
+		loading := false
+		a.host.Update(func() {
+			if current() {
+				loading = true
+				a.showPicker(t, offset, &picker.List{Title: "Usages", Loading: true})
+			}
+		})
+		refs, err := srv.References(file, offset)
+		items := a.goPlaces(refs)
 		return func() {
-			if j.srv != srv || !a.tabActive(t) || t.ed.Buffer.Version() != version {
+			// Escape on the list while it looked is a change of mind.
+			if !current() || loading && !t.ed.PopupShown() {
 				return
 			}
-			rel, ok := a.relative(loc.Path)
-			if !ok {
-				return
-			}
-			a.openSpan(openLine{path: rel, line: line, col: col})
+			a.showPicker(t, offset, &picker.List{Title: "Usages", Items: items})
 		}
 	})
 }

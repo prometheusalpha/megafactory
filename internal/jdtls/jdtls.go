@@ -197,6 +197,7 @@ func InitializeParams(project string, pid int, bundles []string, runtimes []jdk.
 				"hover":              map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
 				"definition":         map[string]any{"linkSupport": false},
 				"implementation":     map[string]any{"linkSupport": false},
+				"references":         map[string]any{},
 				"publishDiagnostics": map[string]any{},
 			},
 			"window": map[string]any{"workDoneProgress": true},

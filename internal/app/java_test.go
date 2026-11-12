@@ -39,6 +39,7 @@ type fakeJava struct {
 	hover     func(path string, offset int) (int, int, string, error)
 	define    func(path string, offset int) ([]javalang.Location, error)
 	implement func(path string, offset int) ([]javalang.Location, error)
+	refer     func(path string, offset int) ([]javalang.Location, error)
 	asked     string
 	at        int
 
@@ -113,6 +114,13 @@ func (f *fakeJava) Definition(path string, offset int) ([]javalang.Location, err
 		return nil, nil
 	}
 	return f.define(path, offset)
+}
+
+func (f *fakeJava) References(path string, offset int) ([]javalang.Location, error) {
+	if f.refer == nil {
+		return nil, nil
+	}
+	return f.refer(path, offset)
 }
 
 // Implementation is asked together with Definition, which records the
@@ -353,7 +361,6 @@ func TestJavaDefinitionToImplementation(t *testing.T) {
 		line  int
 	}{
 		{"one implementation", []javalang.Location{{Path: impl, Start: strings.Index(implSrc, "greet")}}, implRel, 2},
-		{"several", []javalang.Location{{Path: impl}, {Path: other}}, ifaceRel, 2},
 		{"none", nil, ifaceRel, 2},
 	} {
 		// Each starts from the demo file, where a definition is asked.
@@ -369,6 +376,95 @@ func TestJavaDefinitionToImplementation(t *testing.T) {
 		if got := a.tabs[a.active].ed.CursorPos().Line; got != c.line {
 			t.Errorf("%s: caret on line %d, want %d", c.name, got, c.line)
 		}
+	}
+
+	// Several: a list of them below the caret, and Enter opens the one
+	// chosen.
+	a.openAt(demoRel, 0)
+	tt.Frame()
+	tb = a.tabs[a.active]
+	f.implement = func(string, int) ([]javalang.Location, error) {
+		return []javalang.Location{{Path: impl, Start: strings.Index(implSrc, "greet")}, {Path: other}}, nil
+	}
+	tb.ed.OnDefinition(0)
+	tt.Frame()
+	tt.Frame()
+	if a.tabs[a.active] != tb || !tb.ed.PopupShown() || !tt.HasText("Implementations  2") || !tt.HasText("GreeterImpl.java:3") || !tt.HasText("Other.java:1") {
+		t.Fatalf("several: no list of them, %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if got := a.tabs[a.active].path; got != implRel {
+		t.Errorf("several: Enter opened %q, want %q", got, implRel)
+	}
+	if got := a.tabs[a.active].ed.CursorPos(); got != (editor.Pos{Line: 2, Col: strings.Index("    public String greet", "greet")}) {
+		t.Errorf("several: caret at %+v", got)
+	}
+}
+
+// On a declaration's name, where a go to would stay, Cmd+click and the
+// shortcut both list its usages: one opens it, several a list, none says
+// so.
+func TestGoToOnDeclarationListsUsages(t *testing.T) {
+	dir := sampleProject(t)
+	a, f, tt := openDemo(t, dir)
+	demo := filepath.Join(dir, filepath.FromSlash(demoRel))
+	data, _ := os.ReadFile(demo)
+	name := bytes.Index(data, []byte("DemoApplication {"))
+	userRel := "src/main/java/com/example/demo/User.java"
+	user := filepath.Join(dir, filepath.FromSlash(userRel))
+	userSrc := "package com.example.demo;\nclass User {\n    DemoApplication app;\n    DemoApplication other;\n}\n"
+	os.WriteFile(user, []byte(userSrc), 0o644)
+	f.define = func(string, int) ([]javalang.Location, error) {
+		return []javalang.Location{{Path: demo, Start: name, End: name + len("DemoApplication")}}, nil
+	}
+	first := strings.Index(userSrc, "DemoApplication app")
+	second := strings.Index(userSrc, "DemoApplication other")
+	at := func(off int) javalang.Location {
+		return javalang.Location{Path: user, Start: off, End: off + len("DemoApplication")}
+	}
+	ask := func(goTo func(), refs ...javalang.Location) *tab {
+		t.Helper()
+		a.openAt(demoRel, 0)
+		tt.Frame()
+		tb := a.tabs[a.active]
+		tb.ed.Select(name+3, name+3)
+		f.refer = func(string, int) ([]javalang.Location, error) { return refs, nil }
+		goTo()
+		tt.Frame()
+		tt.Frame()
+		return tb
+	}
+	click := func() { a.tabs[a.active].ed.OnDefinition(name + 3) }
+
+	ask(click, at(first))
+	if got := a.tabs[a.active].path; got != userRel {
+		t.Fatalf("one usage: opened %q, want %q", got, userRel)
+	}
+	if got := a.tabs[a.active].ed.CursorPos(); got != (editor.Pos{Line: 2, Col: 4}) {
+		t.Errorf("one usage: caret at %+v", got)
+	}
+
+	tb := ask(click, at(first), at(second))
+	if a.tabs[a.active] != tb || !tt.HasText("Usages  2") || !tt.HasText("DemoApplication other;") {
+		t.Fatalf("several usages: %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyDown)
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if got := a.tabs[a.active].ed.CursorPos(); a.tabs[a.active].path != userRel || got != (editor.Pos{Line: 3, Col: 4}) {
+		t.Errorf("several usages: Down, Enter opened %q at %+v", a.tabs[a.active].path, got)
+	}
+
+	// The shortcut, on a declaration with no implementations.
+	tb = ask(a.GoToImplementation)
+	if a.tabs[a.active] != tb || !tt.HasText("Nothing found") {
+		t.Fatalf("no usages: %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if tb.ed.PopupShown() {
+		t.Error("Escape left the list open")
 	}
 }
 
