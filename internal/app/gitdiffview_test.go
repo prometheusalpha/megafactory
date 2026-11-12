@@ -109,3 +109,62 @@ func TestOpenDiffShowsHeadAndWorking(t *testing.T) {
 		t.Error("no Unified button")
 	}
 }
+
+// Stepping through the changes goes past the last one only on a second
+// press, into the next changed file in the Changes page's order, and back.
+func TestDiffStepAcrossFiles(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-q")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	base := "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n"
+	edited := "1\nTWO\n3\n4\n5\n6\n7\n8\n9\n10\nELEVEN\n12\n"
+	for _, name := range []string{"a.txt", "b.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(base), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "-c", "commit.gpgsign=false", "commit", "-q", "-m", "initial")
+	for _, name := range []string{"a.txt", "b.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(edited), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a, _ := diffApp(t, dir, "a.txt", edited)
+	a.git.changes = []git.Status{{Path: "b.txt", Code: " M"}, {Path: "a.txt", Code: " M"}}
+	a.openDiff("a.txt")
+	dt := a.tabs[a.active]
+	tabs := len(a.tabs)
+	hunk := func() int { i, _ := dt.diff.CurrentHunk(); return i }
+
+	if diffStepHunk(dt.diff, -1) >= 0 || a.diffNeighbor("a.txt", -1) != "" {
+		t.Error("the first file's top can step back")
+	}
+	a.diffStep(dt, 1)
+	a.diffStep(dt, 1)
+	if hunk() != 1 {
+		t.Fatalf("after two steps at hunk %d, want 1", hunk())
+	}
+	a.diffStep(dt, 1)
+	if dt.diffRel != "a.txt" || !diffArmed(dt, 1) {
+		t.Fatalf("a first press past the end left %q armed %v", dt.diffRel, diffArmed(dt, 1))
+	}
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.Frame()
+	if !tt.HasText("Click again for next file") {
+		t.Error("no hint for the second press")
+	}
+	a.diffStep(dt, 1)
+	if dt.diffRel != "b.txt" || dt.path != diffPath("b.txt") || hunk() != 0 || len(a.tabs) != tabs {
+		t.Fatalf("second press: rel %q hunk %d tabs %d", dt.diffRel, hunk(), len(a.tabs))
+	}
+	if diffStepHunk(dt.diff, 1) < 0 || a.diffNeighbor("b.txt", 1) != "" {
+		t.Error("b.txt should step on to its second change and have no next file")
+	}
+	a.diffStep(dt, -1)
+	a.diffStep(dt, -1)
+	if dt.diffRel != "a.txt" || hunk() != 1 {
+		t.Fatalf("back: rel %q hunk %d, want a.txt at its last change", dt.diffRel, hunk())
+	}
+}

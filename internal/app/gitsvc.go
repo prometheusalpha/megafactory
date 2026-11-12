@@ -161,18 +161,24 @@ func (a *App) changesPage(c *ui.Context, k *colors) {
 				ui.Text(c, "No changes").FontSize(12.5).TextColor(k.textMuted).SingleLine().Padding(6)
 				return
 			}
-			changes := slices.Clone(a.git.changes)
-			slices.SortStableFunc(changes, func(x, y git.Status) int {
-				if d := gitChangeOrder(x.Kind()) - gitChangeOrder(y.Kind()); d != 0 {
-					return d
-				}
-				return strings.Compare(x.Path, y.Path)
-			})
-			for _, s := range changes {
+			for _, s := range a.gitSortedChanges() {
 				a.gitChangeRow(c, k, s)
 			}
 		})
 	})
+}
+
+// gitSortedChanges are the changes in the order the Changes page lists
+// them, which the diff's next and previous file follow too.
+func (a *App) gitSortedChanges() []git.Status {
+	changes := slices.Clone(a.git.changes)
+	slices.SortStableFunc(changes, func(x, y git.Status) int {
+		if d := gitChangeOrder(x.Kind()) - gitChangeOrder(y.Kind()); d != 0 {
+			return d
+		}
+		return strings.Compare(x.Path, y.Path)
+	})
+	return changes
 }
 
 // Conflicts lead, tracked changes follow, and untracked files come last.

@@ -44,6 +44,11 @@ type tab struct {
 	// Diff tabs have no ed; they show a DiffState instead.
 	diff    *editor.DiffState
 	diffRel string
+	// diffArm is the direction (-1, 1) of a step past the first or last
+	// change that waits for a second press to go to the other file, as
+	// long as the caret stays at diffArmAt.
+	diffArm   int
+	diffArmAt int
 	// autoVer is the version of the text autosave last saw modified, so
 	// that each edit schedules its save once.
 	autoVer uint64
