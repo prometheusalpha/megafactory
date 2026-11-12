@@ -178,6 +178,24 @@ func iconButton(c *ui.Context, k *colors, name, label string, size, iconSize flo
 	return b
 }
 
+// solidIconButton is an iconButton filled with bg, for a button that
+// stands out while what it controls is live.
+func solidIconButton(c *ui.Context, name, label string, bg ui.Color, size, iconSize float32) ui.Element {
+	b := ui.Box(c).Size(size, size).Center().Radius(size / 2.6).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label).Tooltip(label)
+	if b.Pressed() {
+		b.Background(bg.Alpha(0.7))
+	} else if b.Hovered() {
+		b.Background(bg.Alpha(0.85))
+	} else {
+		b.Background(bg)
+	}
+	b.Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond})
+	b.Children(func() {
+		ui.Icon(c, icon(name)).Size(iconSize, iconSize).TextColor(ui.Hex("#ffffff"))
+	})
+	return b
+}
+
 // track styles a tab list as the capsule that holds its tabs. It styles
 // TabsBase's own List rather than wrapping it: TabsBase places the list
 // where it is called, so a wrapper built after it would stay empty.

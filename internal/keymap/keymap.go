@@ -38,6 +38,9 @@ var Actions = []Action{
 	{"recentProjects", "Recent Projects", Binding{ui.Cmd | ui.Alt, ui.KeyR}},
 	{"togglePanel", "Toggle Bottom Panel", Binding{ui.Ctrl, ui.KeyBackquote}},
 	{"goToImplementation", "Go to Implementation", Binding{ui.Cmd | ui.Shift, ui.KeyI}},
+	{"run", "Run / Rerun", Binding{ui.Ctrl, ui.KeyR}},
+	{"debug", "Debug", Binding{ui.Ctrl, ui.KeyD}},
+	{"stop", "Stop", Binding{ui.Ctrl, ui.KeyS}},
 }
 
 // Fixed are the shortcuts the app keeps as they are, which no action may

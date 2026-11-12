@@ -218,6 +218,7 @@ func (a *App) launch(cmd runcfg.Command, name string, gen int) {
 	a.stopProc()
 	a.bottomTab = 0
 	a.showBottom = true
+	a.focus = focusBottom
 	a.runConsole = newRunConsole(name, gen)
 	proc, err := a.host.StartProc(
 		runner.Spec{Argv: cmd.Argv, Dir: cmd.Dir, Env: cmd.Env},

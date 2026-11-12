@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -209,7 +210,8 @@ func TestRunConsoleStreamsAndStackLink(t *testing.T) {
 	if pos := a.tabs[0].ed.CursorPos(); pos.Line != 11 {
 		t.Errorf("caret on line %d, want 11", pos.Line)
 	}
-	click(t, tt, "Rerun")
+	// The run has ended, so Run is back in Rerun's place and runs it again.
+	click(t, tt, "Run")
 	tt.Frame()
 	if a.runGen != 2 || len(a.runConsole.lines) != 2 {
 		t.Errorf("rerun: gen %d lines %v", a.runGen, a.runConsole.lines)
@@ -445,5 +447,48 @@ func TestRunConfigCancelRevertsDraft(t *testing.T) {
 	tt.Frame()
 	if a.runEdit.draft.Command != "echo 1" {
 		t.Errorf("draft after Cancel %q", a.runEdit.draft.Command)
+	}
+}
+
+// Run puts the panel in focus and keeps its output on the last line, though
+// long lines wrap only once they are measured, after the scroll; a scroll
+// up stops it until Scroll to End.
+func TestRunConsoleFollowsWrappedOutput(t *testing.T) {
+	a, tt, _ := phase4App(t)
+	cfg, _ := a.runStore.Upsert(runcfg.Config{Name: "Demo", Kind: runcfg.Shell, Command: "echo demo"})
+	a.runConfig = cfg.ID
+	a.focus = focusEditor
+	click(t, tt, "Run")
+	tt.Frame()
+	if a.focus != focusBottom {
+		t.Errorf("focus %d, want the bottom panel", a.focus)
+	}
+	// A real process's lines come in bursts between frames.
+	r := a.runConsole
+	for i := range 300 {
+		r.add(strconv.Itoa(i)+" "+strings.Repeat("INFO o.s.b.w.e.tomcat.TomcatWebServer started ", 8), false)
+		if i%10 == 9 {
+			tt.Frame()
+		}
+	}
+	tt.Frame()
+	atEnd := func() bool {
+		end := r.ed.LineTop(r.ed.Buffer.LineCount())
+		return r.ed.ScrollY()+r.ed.ViewportHeight() >= end-1
+	}
+	if !r.wrap || !atEnd() {
+		t.Fatalf("not at the end: scroll %v view %v end %v", r.ed.ScrollY(), r.ed.ViewportHeight(), r.ed.LineTop(r.ed.Buffer.LineCount()))
+	}
+	r.ed.SetScrollY(0)
+	tt.Frame()
+	tt.Frame()
+	if r.follow || r.ed.ScrollY() != 0 {
+		t.Fatalf("a scroll up was pulled back: scroll %v", r.ed.ScrollY())
+	}
+	click(t, tt, "Scroll to End")
+	tt.Frame()
+	tt.Frame()
+	if !atEnd() {
+		t.Errorf("Scroll to End did not follow again: scroll %v", r.ed.ScrollY())
 	}
 }

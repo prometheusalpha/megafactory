@@ -31,13 +31,17 @@ type runConsoleState struct {
 	// ed shows the lines as one read-only text, so a selection can span
 	// them. Its tokenizer tells stderr lines from stdout by line number.
 	ed *editor.State
-	// built is whether a frame has laid ed out, which scrolling asks of it.
-	built bool
 	// wrap is soft wrap, on until the Wrap button turns it off.
 	wrap bool
-	// follow asks the next frame to scroll to the last line: set by a new
-	// line while the view is at the end, or by the Scroll to End button.
+	// follow keeps the view on the last line, every frame, until the user
+	// scrolls up; scrolling back to the end, or Scroll to End, resumes it.
+	// It is a mode rather than a check as each line comes: soft-wrapped
+	// lines are measured only after the scroll, which leaves the view short
+	// of the end, and that would read as the user having scrolled away.
 	follow bool
+	// pinned is where following last put the view, to tell a scroll up
+	// from it. Measuring wraps only ever moves the view down.
+	pinned float64
 }
 
 func newRunConsole(name string, id int) *runConsoleState {
@@ -74,12 +78,8 @@ func (r *runConsoleState) tokenize(line string, state uint64, toks []editor.Toke
 	return toks, state + 1
 }
 
-// add appends a line. The view keeps following the output only while it
-// was at the end, so scrolling up to read does not get pulled back down.
+// add appends a line; consoleEditor scrolls to it while following.
 func (r *runConsoleState) add(text string, stderr bool) {
-	if r.built {
-		r.follow = r.atEnd()
-	}
 	r.lines = append(r.lines, consoleLine{text: text, stderr: stderr})
 	if len(r.lines) > 1 {
 		text = "\n" + text
@@ -93,7 +93,12 @@ func (r *runConsoleState) add(text string, stderr bool) {
 func (r *runConsoleState) clear() {
 	r.lines = nil
 	r.ed.Buffer.Reset("")
-	r.follow = true
+	r.followEnd()
+}
+
+// followEnd follows the output again from wherever the view is now.
+func (r *runConsoleState) followEnd() {
+	r.follow, r.pinned = true, 0
 }
 
 // atEnd is whether the last frame showed the last line.
@@ -116,9 +121,6 @@ func (a *App) runConsolePage(c *ui.Context, k *colors) {
 			}
 			if iconButton(c, k, "x", "Stop", 24, 13).Clicked() {
 				a.stopRun()
-			}
-			if iconButton(c, k, "refresh-cw", "Rerun", 24, 13).Clicked() {
-				a.rerun()
 			}
 		})
 		r := a.runConsole
@@ -149,7 +151,7 @@ func (a *App) consoleTools(c *ui.Context, k *colors, r *runConsoleState) {
 		r.clear()
 	}
 	if iconButton(c, k, "arrow-down-to-line", "Scroll to End", 24, 13).Clicked() {
-		r.follow = true
+		r.followEnd()
 	}
 }
 
@@ -174,13 +176,17 @@ func (a *App) consoleEditor(c *ui.Context, k *colors, r *runConsoleState) {
 	}
 	c.Key("run console:" + strconv.Itoa(r.id))
 	editor.View(c, r.ed).Grow(1).MinHeight(0).FillWidth()
-	if r.follow {
-		// Once per request: add asks again while the view is still at the
-		// end, and a scroll up in between is left alone.
-		r.ed.SetScrollY(max(r.ed.LineTop(r.ed.Buffer.LineCount())-r.ed.ViewportHeight(), 0))
+	// The view has taken this frame's wheel and drags by now, so a scroll
+	// up shows against where following left it.
+	if r.follow && r.ed.ScrollY() < r.pinned-0.5 {
 		r.follow = false
+	} else if !r.follow && r.ed.ViewportHeight() > 0 && r.atEnd() {
+		r.follow = true
 	}
-	r.built = true
+	if r.follow {
+		r.ed.SetScrollY(max(r.ed.LineTop(r.ed.Buffer.LineCount())-r.ed.ViewportHeight(), 0))
+		r.pinned = r.ed.ScrollY()
+	}
 }
 
 // runnableIn is the class a tab offers to run: the line of its main method,

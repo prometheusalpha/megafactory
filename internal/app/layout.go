@@ -358,17 +358,24 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 		ui.Spacer(c)
 		a.runConfigSelect(c, k)
 		ui.Row(c).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
-			if iconButton(c, k, "play", "Run", 30, 16).Clicked() {
+			// While a process runs, Run becomes Rerun and Stop lights up, so
+			// the pair says what is live without a separate Rerun button.
+			if a.runProc != nil {
+				if solidIconButton(c, "rotate-cw", "Rerun", c.Theme().Success, 30, 16).Tooltip(shortcutTip("Rerun", a.keys.Binding("run"))).Clicked() {
+					a.rerun()
+				}
+			} else if iconButton(c, k, "play", "Run", 30, 16).Tooltip(shortcutTip("Run", a.keys.Binding("run"))).Clicked() {
 				a.runCurrent()
 			}
-			if iconButton(c, k, "x", "Stop", 30, 14).Clicked() {
-				a.stopRun()
-			}
-			if iconButton(c, k, "refresh-cw", "Rerun", 30, 16).Clicked() {
-				a.rerun()
-			}
-			if iconButton(c, k, "bug", "Debug", 30, 17).Clicked() {
+			if iconButton(c, k, "bug", "Debug", 30, 17).Tooltip(shortcutTip("Debug", a.keys.Binding("debug"))).Clicked() {
 				a.startDebug()
+			}
+			if a.runProc != nil {
+				if solidIconButton(c, "pause", "Stop", c.Theme().Danger, 30, 14).Tooltip(shortcutTip("Stop", a.keys.Binding("stop"))).Clicked() {
+					a.stopRun()
+				}
+			} else if iconButton(c, k, "x", "Stop", 30, 14).Tooltip(shortcutTip("Stop", a.keys.Binding("stop"))).Clicked() {
+				a.stopRun()
 			}
 			sync := iconButton(c, k, "refresh-cw", "Sync Maven/Gradle", 30, 16)
 			if a.java.buildChanged {

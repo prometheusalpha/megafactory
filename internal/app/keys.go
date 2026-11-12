@@ -19,6 +19,10 @@ func (a *App) keyActions() map[string]func() {
 		"recentProjects":     a.OpenRecentPalette,
 		"togglePanel":        func() { a.showBottom = !a.showBottom },
 		"goToImplementation": a.GoToImplementation,
+		// A new run hangs up the live one, so Run is Rerun as well.
+		"run":   a.runCurrent,
+		"debug": a.startDebug,
+		"stop":  a.stopRun,
 	}
 }
 
