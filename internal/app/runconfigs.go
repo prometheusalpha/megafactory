@@ -266,6 +266,16 @@ func (a *App) stopProc() {
 func (a *App) stopRun() {
 	a.stopProc()
 	a.runGen++
+	if a.debug.live() {
+		a.debugStop()
+	}
+}
+
+// Shutdown kills what the app started, the run's process and the debugged
+// program, as the window closes, rather than leave them behind.
+func (a *App) Shutdown() {
+	a.stopProc()
+	a.debugKill()
 }
 
 func (a *App) rerun() {

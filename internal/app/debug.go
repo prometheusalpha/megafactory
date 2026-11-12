@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"megafactory/internal/build"
 	"megafactory/internal/dap"
@@ -61,23 +63,9 @@ func shortPath(p string) string {
 	return filepath.Base(p)
 }
 
-// The kinds of line the debug console holds, which decide their colors:
-// the program's own output, the errors of it and of the debugger, and what
-// the adapter, the console's prompt, or the app says.
-const (
-	debugOutput = iota
-	debugError
-	debugNote
-)
-
-// debugLine is one line of the debug console.
-type debugLine struct {
-	text  string
-	level int
-}
-
 // debugWatch is a watch expression and what it was where the program last
-// stopped.
+// stopped. An evaluation is one too, read once and not again at the next
+// stop.
 type debugWatch struct {
 	expr  string
 	value string
@@ -103,6 +91,10 @@ type debugService struct {
 	// starts again.
 	cfg  string
 	conn *dap.Conn
+	// dialing is the connection of a session still starting, which conn
+	// is not yet: the launch may have started the program by then, so a
+	// closing app hangs it up too. The starting job sets it, off the UI.
+	dialing atomic.Pointer[dap.Conn]
 
 	bps *dap.Breakpoints
 	// last is each file's text as its breakpoints moved last.
@@ -120,8 +112,13 @@ type debugService struct {
 	expanded map[int]bool
 
 	watch []debugWatch
-	lines []debugLine
+	evals []debugWatch
 	input string
+	// out is what the program printed, and the debugger's errors, as the
+	// run console shows a run's. It is nil before the first session.
+	out *runConsoleState
+	// tab is the page's Output or Watch tab.
+	tab int
 
 	// file and line are where the session stopped, which its editor opens
 	// and paints.
@@ -164,6 +161,9 @@ func (d *debugService) frameID() int {
 // stopped reports whether the program is paused, which the toolbar's
 // stepping and the console's prompt need it to be.
 func (d *debugService) stopped() bool { return d.phase == debugStopped && d.conn != nil }
+
+// live is whether a session is starting or has a program to stop.
+func (d *debugService) live() bool { return d.conn != nil || d.phase == debugStarting }
 
 func (a *App) debugPath() string {
 	return filepath.Join(a.project, ".idea", "megafactory_breakpoints.json")
@@ -289,7 +289,8 @@ func (a *App) startDebugConfig(cfg runcfg.Config) {
 	gen := d.gen
 	d.clearSession()
 	d.phase, d.err, d.cfg = debugStarting, nil, cfg.ID
-	d.lines = nil
+	d.out, d.evals = newRunConsole(cfg.Name, gen), nil
+	d.out.key, d.out.ed.Label = "debug console:"+strconv.Itoa(gen), "Debug output"
 	a.bottomTab, a.showBottom = 1, true
 	bp, _ := build.Detect(a.project)
 	r := appResolver{app: a, project: a.project, srv: srv, build: bp}
@@ -315,13 +316,18 @@ func (a *App) startDebugConfig(cfg runcfg.Config) {
 		if err != nil {
 			return fail(err)
 		}
+		d.dialing.Store(conn)
 		if err := debugHandshake(conn, cfg, spec); err != nil {
+			d.dialing.CompareAndSwap(conn, nil)
 			conn.Close()
 			return fail(err)
 		}
 		return func() {
+			d.dialing.CompareAndSwap(conn, nil)
+			// Stopped while starting: the launch has run the program,
+			// which a closed connection alone leaves running.
 			if d.gen != gen {
-				conn.Close()
+				a.host.Run(func() func() { conn.Disconnect(true); conn.Close(); return func() {} })
 				return
 			}
 			d.conn, d.phase = conn, debugLaunching
@@ -367,6 +373,8 @@ func (a *App) debugEvent(gen int, ev dap.Event) {
 		var s dap.StoppedEvent
 		dap.Decode(ev.Body, &s)
 		d.phase = debugStopped
+		// A stop is to be read, so its variables and watches show.
+		d.tab, a.bottomTab, a.showBottom = 1, 1, true
 		if s.ThreadID != 0 {
 			d.thread = s.ThreadID
 		}
@@ -418,7 +426,7 @@ func (a *App) debugConfigure(gen int) {
 				return
 			}
 			for _, msg := range failed {
-				d.lines = append(d.lines, debugLine{text: msg, level: debugError})
+				d.print(msg, true)
 			}
 			if err != nil {
 				a.debugFail(err)
@@ -483,17 +491,7 @@ func (a *App) debugLoadStacks() {
 	})
 }
 
-// debugSelectThread shows one thread's frames.
-func (a *App) debugSelectThread(id int) {
-	d := &a.debug
-	if d.thread == id {
-		return
-	}
-	d.thread = id
-	a.debugLoadStacks()
-}
-
-// debugSelectFrame makes a frame the one the variables and the console read,
+// debugSelectFrame makes a frame the one the variables and the watches read,
 // and opens the file it is in at its line.
 func (a *App) debugSelectFrame(i int) {
 	d := &a.debug
@@ -626,14 +624,42 @@ func (a *App) debugPause() {
 
 // debugStop ends the session and kills the program, keeping the console.
 func (a *App) debugStop() {
+	if conn := a.debugEnd(); conn != nil {
+		a.host.Run(func() func() { conn.Disconnect(true); conn.Close(); return func() {} })
+	}
+}
+
+// debugKill is debugStop for a closing app, which would exit before a job
+// sent the disconnect: the program, launched by jdtls, would outlive it and
+// keep its ports. It waits for the adapter, but not past quitWait.
+func (a *App) debugKill() {
+	conn := a.debugEnd()
+	if conn == nil {
+		conn = a.debug.dialing.Swap(nil)
+	}
+	if conn == nil {
+		return
+	}
+	done := make(chan struct{})
+	go func() { conn.Disconnect(true); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(quitWait):
+	}
+	conn.Close()
+}
+
+// quitWait bounds how long closing the app waits for the debugger.
+const quitWait = 2 * time.Second
+
+// debugEnd forgets the session, returning its connection to hang up.
+func (a *App) debugEnd() *dap.Conn {
 	d := &a.debug
 	conn := d.conn
 	d.gen++
 	d.phase = debugOff
 	d.clearSession()
-	if conn != nil {
-		a.host.Run(func() func() { conn.Disconnect(true); conn.Close(); return func() {} })
-	}
+	return conn
 }
 
 // debugEnded handles the adapter's terminated event, which is the program's
@@ -661,7 +687,7 @@ func (a *App) debugFail(err error) {
 		d.conn = nil
 	}
 	d.phase, d.err = debugFailed, err
-	d.lines = append(d.lines, debugLine{text: err.Error(), level: debugError})
+	d.print(err.Error(), true)
 	a.bottomTab, a.showBottom = 1, true
 }
 
@@ -755,10 +781,9 @@ func (a *App) debugRunConsole() {
 		return
 	}
 	d.input = ""
-	d.lines = append(d.lines, debugLine{text: "› " + expr, level: debugNote})
 	conn, gen, frame := d.conn, d.gen, d.frameID()
 	if conn == nil || frame == 0 {
-		d.lines = append(d.lines, debugLine{text: "the program is not stopped", level: debugError})
+		d.evals = append(d.evals, debugWatch{expr: expr, err: "the program is not stopped"})
 		return
 	}
 	a.host.Run(func() func() {
@@ -767,27 +792,43 @@ func (a *App) debugRunConsole() {
 			if d.gen != gen {
 				return
 			}
+			e := debugWatch{expr: expr}
 			if err != nil {
-				d.lines = append(d.lines, debugLine{text: err.Error(), level: debugError})
-				return
+				e.err = err.Error()
+			} else {
+				e.value = v.Value
 			}
-			d.lines = append(d.lines, debugLine{text: v.Value, level: debugOutput})
+			d.evals = append(d.evals, e)
 		}
 	})
+}
+
+func (a *App) debugRemoveEval(i int) {
+	d := &a.debug
+	if i < 0 || i >= len(d.evals) {
+		return
+	}
+	d.evals = slices.Delete(d.evals, i, i+1)
 }
 
 // addOutput appends what the program wrote, a line at a time, as the
 // adapter sends it in chunks.
 func (d *debugService) addOutput(o dap.OutputEvent) {
-	level := debugOutput
-	if o.Category == "stderr" {
-		level = debugError
-	}
 	for _, line := range strings.Split(o.Output, "\n") {
 		if line = strings.TrimSuffix(line, "\r"); line != "" {
-			d.lines = append(d.lines, debugLine{text: line, level: level})
+			d.print(line, o.Category == "stderr")
 		}
 	}
+}
+
+// print adds a line to the output, which a failure before any session has
+// to make first.
+func (d *debugService) print(text string, stderr bool) {
+	if d.out == nil {
+		d.out = newRunConsole("Debug", 0)
+		d.out.key, d.out.ed.Label = "debug console:0", "Debug output"
+	}
+	d.out.add(text, stderr)
 }
 
 // wireGutter is what a tab's editor shows of running and debugging: the run

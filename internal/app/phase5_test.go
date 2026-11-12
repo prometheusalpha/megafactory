@@ -421,6 +421,9 @@ func TestWatchEvaluatesAtTheFrame(t *testing.T) {
 	startSampleDebug(t, a, adapter)
 	adapter.event("stopped", map[string]any{"reason": "breakpoint", "threadId": 1})
 	eventually(t, "the stop", func() bool { return len(a.debug.scopes) > 0 })
+	if a.debug.tab != 1 || a.bottomTab != 1 || !a.showBottom {
+		t.Errorf("the stop shows tab %d of panel %d (%v), want the Watch tab", a.debug.tab, a.bottomTab, a.showBottom)
+	}
 	tt.Frame()
 	a.debug.input = "i + 1"
 	tt.Frame()
@@ -452,36 +455,44 @@ func TestWatchEvaluatesAtTheFrame(t *testing.T) {
 	}
 }
 
-// 5.8 The console shows what the program wrote and evaluates at the frame.
-func TestDebugConsoleOutputAndEvaluate(t *testing.T) {
+// 5.8 The Output tab holds what the program wrote, and the Watch tab what
+// was evaluated at the frame.
+func TestDebugOutputAndEvaluate(t *testing.T) {
 	a, adapter, tt := debugApp(t)
 	startSampleDebug(t, a, adapter)
 	adapter.event("output", map[string]any{"category": "stdout", "output": "hello\n"})
-	eventually(t, "the output", func() bool { return len(a.debug.lines) > 0 })
-	if a.debug.lines[0].text != "hello" || a.debug.lines[0].level != debugOutput {
-		t.Fatalf("console %+v", a.debug.lines)
+	eventually(t, "the output", func() bool { return a.debug.out != nil && len(a.debug.out.lines) > 0 })
+	if l := a.debug.out.lines[0]; l.text != "hello" || l.stderr {
+		t.Fatalf("output %+v", a.debug.out.lines)
+	}
+	if got := a.debug.out.ed.Buffer.String(); got != "hello" {
+		t.Errorf("output text %q", got)
 	}
 	adapter.event("stopped", map[string]any{"reason": "breakpoint", "threadId": 1})
 	eventually(t, "the stop", func() bool { return len(a.debug.scopes) > 0 })
+	a.debug.tab = 1
 	tt.Frame()
 	a.debug.input = "i * 2"
 	tt.Frame()
 	click(t, tt, "Evaluate")
-	eventually(t, "the answer", func() bool { return len(a.debug.lines) >= 3 })
-	last := a.debug.lines[len(a.debug.lines)-1]
-	if last.text != "3" || last.level != debugOutput {
-		t.Errorf("answer %+v", a.debug.lines)
+	eventually(t, "the answer", func() bool { return len(a.debug.evals) == 1 })
+	if e := a.debug.evals[0]; e.expr != "i * 2" || e.value != "3" {
+		t.Errorf("answer %+v", e)
+	}
+	if len(a.debug.out.lines) != 1 {
+		t.Errorf("evaluation went to the output: %+v", a.debug.out.lines)
 	}
 	if evaluate := adapter.args(t, "evaluate", 0); evaluate["context"] != "repl" || evaluate["frameId"] != float64(100) {
 		t.Errorf("evaluate %v", evaluate)
 	}
-	if !tt.HasText("hello") {
-		t.Errorf("console not shown: %v", tt.Texts())
+	tt.Frame()
+	if !tt.HasText("i * 2") {
+		t.Errorf("evaluation not shown: %v", tt.Texts())
 	}
 }
 
-// 5.5 The call stack lists the frames, and choosing one moves the variables
-// and the console's frame to it.
+// 5.5 Choosing a frame moves the editor, the variables and what evaluates
+// to it.
 func TestCallStackChoosesFrame(t *testing.T) {
 	a, adapter, tt := debugApp(t)
 	adapter.answer = func(command string, _ json.RawMessage) any {
@@ -506,19 +517,99 @@ func TestCallStackChoosesFrame(t *testing.T) {
 	if a.debug.file != "src/main/java/com/example/demo/HelloController.java" {
 		t.Fatalf("opened %q", a.debug.file)
 	}
-	tt.Frame()
-	tt.Frame()
-	click(t, tt, "runDemo")
+	a.debugSelectFrame(1)
 	if a.debug.frame != 1 || a.debug.file != demoRel || a.debug.line != 11 {
 		t.Fatalf("frame %d at %s:%d", a.debug.frame, a.debug.file, a.debug.line)
 	}
 	eventually(t, "the frame's scopes", func() bool { return len(a.debug.scopes) > 0 })
+	a.debug.tab = 1
 	tt.Frame()
 	a.debug.input = "x"
 	tt.Frame()
 	click(t, tt, "Evaluate")
 	if evaluate := adapter.args(t, "evaluate", 0); evaluate["frameId"] != float64(200) {
 		t.Errorf("evaluate %v, want the chosen frame", evaluate)
+	}
+}
+
+// The title bar's Stop ends a debug session as it does a run.
+func TestStopEndsDebugging(t *testing.T) {
+	a, adapter, tt := debugApp(t)
+	startSampleDebug(t, a, adapter)
+	tt.Frame()
+	click(t, tt, "Stop")
+	if !adapter.sent("disconnect") || a.debug.phase != debugOff || a.debug.conn != nil {
+		t.Errorf("stop: requests %v phase %d", adapter.got, a.debug.phase)
+	}
+}
+
+// Closing the app ends a debug session, the program with it, before it
+// returns: a job would not run before the app exits.
+func TestShutdownKillsDebuggee(t *testing.T) {
+	a, adapter, _ := debugApp(t)
+	startSampleDebug(t, a, adapter)
+	a.Shutdown()
+	if !adapter.sent("disconnect") || a.debug.phase != debugOff || a.debug.conn != nil {
+		t.Fatalf("shutdown: requests %v phase %d", adapter.got, a.debug.phase)
+	}
+	if args := adapter.args(t, "disconnect", 0); args["terminateDebuggee"] != true {
+		t.Errorf("disconnect %v", args)
+	}
+}
+
+// Closing the app while the launch is still out hangs that session up too:
+// java-debug has started the program by then, and the app holds no session
+// yet.
+func TestShutdownWhileLaunching(t *testing.T) {
+	a, adapter, _ := debugApp(t)
+	launched, release := make(chan struct{}), make(chan struct{})
+	base := adapter.answer
+	adapter.answer = func(command string, args json.RawMessage) any {
+		if command == "launch" {
+			close(launched)
+			<-release
+		}
+		return base(command, args)
+	}
+	a.startDebug()
+	<-launched
+	if a.debug.conn != nil {
+		t.Fatal("the session is already the app's")
+	}
+	// The adapter reads the disconnect once it has answered the launch.
+	time.AfterFunc(50*time.Millisecond, func() { close(release) })
+	a.Shutdown()
+	if args := adapter.args(t, "disconnect", 0); args["terminateDebuggee"] != true {
+		t.Errorf("disconnect %v", args)
+	}
+	if a.debug.dialing.Load() != nil {
+		t.Error("the starting session is still held")
+	}
+}
+
+// Stop Debugging while the launch is out ends the program it started, once
+// the launch answers.
+func TestStopWhileLaunching(t *testing.T) {
+	a, adapter, _ := debugApp(t)
+	launched, release := make(chan struct{}), make(chan struct{})
+	base := adapter.answer
+	adapter.answer = func(command string, args json.RawMessage) any {
+		if command == "launch" {
+			close(launched)
+			<-release
+		}
+		return base(command, args)
+	}
+	a.startDebug()
+	<-launched
+	a.debugStop()
+	close(release)
+	eventually(t, "the disconnect", func() bool { return adapter.sent("disconnect") })
+	if args := adapter.args(t, "disconnect", 0); args["terminateDebuggee"] != true {
+		t.Errorf("disconnect %v", args)
+	}
+	if a.debug.conn != nil || a.debug.phase != debugOff {
+		t.Errorf("stopped session came back: phase %d", a.debug.phase)
 	}
 }
 

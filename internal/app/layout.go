@@ -375,7 +375,7 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 			if iconButton(c, k, "bug", "Debug", 30, 17).Tooltip(shortcutTip("Debug", a.keys.Binding("debug"))).Clicked() {
 				a.startDebug()
 			}
-			if a.runProc != nil {
+			if a.runProc != nil || a.debug.live() {
 				if solidIconButton(c, "pause", "Stop", c.Theme().Danger, 30, 14).Tooltip(shortcutTip("Stop", a.keys.Binding("stop"))).Clicked() {
 					a.stopRun()
 				}

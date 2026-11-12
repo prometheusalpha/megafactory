@@ -53,7 +53,10 @@ func main() {
 				e.PreventDefault()
 			}
 		})
-		win.OnClosed(func() { app.SaveState(a.State()) })
+		win.OnClosed(func() {
+			a.Shutdown()
+			app.SaveState(a.State())
+		})
 		// A project moved or deleted since opens as none.
 		if fi, err := os.Stat(st.Project); err == nil && fi.IsDir() {
 			a.OpenProject(st.Project)

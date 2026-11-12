@@ -48,11 +48,32 @@ func (r realResolver) Wrapper(string) ([]string, error) { return nil, nil }
 func (r realResolver) ProjectRoot() string              { return r.project }
 func (r realResolver) Build() runcfg.BuildSystem        { return runcfg.BuildMaven }
 
-// TestRealDebugSession drives java-debug this machine has installed: it
-// resolves a Maven project's classpath through jdtls, starts an adapter
-// session, sets a breakpoint, and must see the program stop on it with its
-// local variable readable. Run with MEGAFACTORY_JDTLS=1.
-func TestRealDebugSession(t *testing.T) {
+// realDebug is a Maven project jdtls has imported, compiled, with its main
+// class's launch resolved.
+type realDebug struct {
+	ctx        context.Context
+	sess       *javalang.Session
+	cfg        runcfg.Config
+	spec       runcfg.Debug
+	project    string
+	sourcePath string
+}
+
+// realWait polls ok for what a real server takes its time over.
+func realWait(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Minute)
+	for !ok() {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s did not happen within 3m", what)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// newRealDebug starts jdtls with java-debug this machine has installed, on
+// a one-class project. It skips without MEGAFACTORY_JDTLS=1.
+func newRealDebug(t *testing.T) *realDebug {
 	if os.Getenv("MEGAFACTORY_JDTLS") == "" {
 		t.Skip("MEGAFACTORY_JDTLS not set")
 	}
@@ -111,7 +132,7 @@ public class App {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
-	defer cancel()
+	t.Cleanup(cancel)
 	finder := jdk.System
 	finder.Roots = append(finder.Roots, serversDir())
 	home, err := finder.Find(ctx)
@@ -151,21 +172,11 @@ public class App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 	sess.Attach(srv.Conn, srv.Capabilities)
 
-	waitFor := func(what string, ok func() bool) {
-		t.Helper()
-		deadline := time.Now().Add(3 * time.Minute)
-		for !ok() {
-			if time.Now().After(deadline) {
-				t.Fatalf("%s did not happen within 3m", what)
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
 	ready := false
-	waitFor("the project to be ready", func() bool {
+	realWait(t, "the project to be ready", func() bool {
 		for !ready {
 			select {
 			case s := <-statuses:
@@ -177,15 +188,54 @@ public class App {
 		return ready
 	})
 
-	mainClass := "demo.App"
-	spec, err := runcfg.DebugSpec(runcfg.Config{ID: "1", Name: "App", Kind: runcfg.Application, MainClass: mainClass},
-		realResolver{project: project, srv: sess, java: home.Java()})
+	cfg := runcfg.Config{ID: "1", Name: "App", Kind: runcfg.Application, MainClass: "demo.App"}
+	spec, err := runcfg.DebugSpec(cfg, realResolver{project: project, srv: sess, java: home.Java()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(spec.ClassPaths) == 0 || spec.ProjectName == "" {
 		t.Fatalf("classpath %v project %q", spec.ClassPaths, spec.ProjectName)
 	}
+	return &realDebug{ctx: ctx, sess: sess, cfg: cfg, spec: spec, project: project, sourcePath: sourcePath}
+}
+
+// dial opens an adapter session, its events going to events.
+func (r *realDebug) dial(t *testing.T, events chan dap.Event) *dap.Conn {
+	t.Helper()
+	port, err := r.sess.StartDebugSession()
+	if err != nil {
+		t.Fatalf("startDebugSession: %v", err)
+	}
+	conn, err := dap.Dial(r.ctx, "127.0.0.1:"+strconv.Itoa(port), func(ev dap.Event) {
+		select {
+		case events <- ev:
+		default:
+		}
+	})
+	if err != nil {
+		t.Fatalf("connect to the adapter on %d: %v", port, err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
+}
+
+// debuggee is the pid of the program java-debug runs from the project, 0
+// while there is none.
+func (r *realDebug) debuggee() int {
+	out, _ := exec.Command("pgrep", "-f", "Xrunjdwp.*"+r.project).Output()
+	pid, _ := strconv.Atoi(strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0]))
+	return pid
+}
+
+// TestRealDebugSession drives java-debug this machine has installed: it
+// resolves a Maven project's classpath through jdtls, starts an adapter
+// session, sets a breakpoint, and must see the program stop on it with its
+// local variable readable. Run with MEGAFACTORY_JDTLS=1.
+func TestRealDebugSession(t *testing.T) {
+	r := newRealDebug(t)
+	sourcePath, spec, cfg := r.sourcePath, r.spec, r.cfg
+	waitFor := func(what string, ok func() bool) { t.Helper(); realWait(t, what, ok) }
+	ctx, sess := r.ctx, r.sess
 
 	port, err := sess.StartDebugSession()
 	if err != nil {
@@ -205,7 +255,6 @@ public class App {
 
 	// The app's own handshake, so that what it sends is what java-debug
 	// is judged by.
-	cfg := runcfg.Config{ID: "1", Name: "App", Kind: runcfg.Application, MainClass: mainClass}
 	if err := debugHandshake(conn, cfg, spec); err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
@@ -287,4 +336,67 @@ public class App {
 	if err := conn.Disconnect(true); err != nil && !strings.Contains(err.Error(), "closed") {
 		t.Logf("disconnect: %v", err)
 	}
+}
+
+// TestRealShutdownKillsDebuggee is what closing the app sends, the
+// disconnect that ends the program, against java-debug: once the launch has
+// answered, and while it is still out, as a session that is starting has it.
+// The program waits on configurationDone, which never goes, so it would
+// live on. Run with MEGAFACTORY_JDTLS=1.
+func TestRealShutdownKillsDebuggee(t *testing.T) {
+	r := newRealDebug(t)
+	gone := func(what string) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for r.debuggee() != 0 {
+			if time.Now().After(deadline) {
+				pid := r.debuggee()
+				exec.Command("kill", "-9", strconv.Itoa(pid)).Run()
+				t.Fatalf("%s: the program %d outlived the disconnect", what, pid)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	t.Run("launched", func(t *testing.T) {
+		conn := r.dial(t, make(chan dap.Event, 64))
+		if err := debugHandshake(conn, r.cfg, r.spec); err != nil {
+			t.Fatalf("handshake: %v", err)
+		}
+		if r.debuggee() == 0 {
+			t.Fatal("no program after the launch")
+		}
+		if err := conn.Disconnect(true); err != nil {
+			t.Logf("disconnect: %v", err)
+		}
+		gone("after the launch")
+	})
+
+	t.Run("launching", func(t *testing.T) {
+		conn := r.dial(t, make(chan dap.Event, 64))
+		handshake := make(chan error, 1)
+		go func() { handshake <- debugHandshake(conn, r.cfg, r.spec) }()
+		started := time.Now()
+		for r.debuggee() == 0 {
+			select {
+			case err := <-handshake:
+				t.Fatalf("the launch answered (%v) before its program showed", err)
+			default:
+			}
+			if time.Since(started) > time.Minute {
+				t.Fatal("no program within 1m")
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		select {
+		case err := <-handshake:
+			t.Logf("the launch had answered (%v) by the time the program showed", err)
+		default:
+			t.Log("disconnecting while the launch is out")
+		}
+		if err := conn.Disconnect(true); err != nil {
+			t.Logf("disconnect: %v", err)
+		}
+		gone("while launching")
+	})
 }

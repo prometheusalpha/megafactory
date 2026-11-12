@@ -26,8 +26,10 @@ type runConsoleState struct {
 	done  bool
 	exit  string
 
-	// id keys the editor, so a rerun starts a fresh one.
-	id int
+	// id keys the editor, so a rerun starts a fresh one; key is that
+	// key, which the debugger's output, keyed by its session, sets.
+	id  int
+	key string
 	// ed shows the lines as one read-only text, so a selection can span
 	// them. Its tokenizer tells stderr lines from stdout by line number.
 	ed *editor.State
@@ -45,7 +47,7 @@ type runConsoleState struct {
 }
 
 func newRunConsole(name string, id int) *runConsoleState {
-	r := &runConsoleState{name: name, id: id, follow: true, wrap: true}
+	r := &runConsoleState{name: name, id: id, key: "run console:" + strconv.Itoa(id), follow: true, wrap: true}
 	lang := &editor.Language{Name: "console", Tokenizer: editor.TokenizerFunc(r.tokenize)}
 	buf := editor.NewBuffer("")
 	buf.SetLanguage(lang)
@@ -174,7 +176,7 @@ func (a *App) consoleEditor(c *ui.Context, k *colors, r *runConsoleState) {
 			}
 		}
 	}
-	c.Key("run console:" + strconv.Itoa(r.id))
+	c.Key(r.key)
 	editor.View(c, r.ed).Grow(1).MinHeight(0).FillWidth()
 	// The view has taken this frame's wheel and drags by now, so a scroll
 	// up shows against where following left it.
