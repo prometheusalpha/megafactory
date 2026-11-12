@@ -39,9 +39,12 @@ func (a *App) gitDiffBase(t *tab) {
 // openDiff opens the diff of rel against HEAD, or activates the one open.
 func (a *App) openDiff(rel string) {
 	if a.activate(diffPath(rel)) {
+		a.tabs[a.active].diff.Focus()
 		return
 	}
 	a.loadDiff(rel, func(d *editor.DiffState) {
+		d.GoToHunk(0)
+		d.Focus()
 		a.tabs = append(a.tabs, &tab{
 			path:    diffPath(rel),
 			name:    diffName(rel),
@@ -83,6 +86,9 @@ func (a *App) loadDiff(rel string, show func(d *editor.DiffState)) {
 				Layout:   editor.DiffSplit,
 				Inline:   editor.DiffInlineWord,
 				Editable: false,
+				// Room below the last line, so that a change near the end
+				// steps to the middle of the view as the others do.
+				ScrollPastEnd: true,
 			})
 		}
 	})
@@ -125,6 +131,7 @@ func (a *App) diffStep(t *tab, dir int) {
 	if h := diffStepHunk(t.diff, dir); h >= 0 {
 		t.diffArm = 0
 		t.diff.GoToHunk(h)
+		t.diff.Focus() // the caret shows only in the editor with the keyboard
 		return
 	}
 	next := a.diffNeighbor(t.diffRel, dir)
@@ -148,7 +155,35 @@ func (a *App) diffStep(t *tab, dir int) {
 		} else {
 			d.GoToHunk(len(d.Hunks()) - 1)
 		}
+		d.Focus()
 	})
+}
+
+// diffHasSource tells whether the diff's file is on disk to open, which a
+// deleted one is not: its working text is empty where HEAD's was not.
+func diffHasSource(d *editor.DiffState) bool {
+	return d.New.Len() > 0 || d.Old.Len() == 0
+}
+
+// diffSourceLine is the working file's line of the caret. On the old
+// side, a line in a change goes to where the change starts, and one after
+// it shifts by the lines the changes before it added or removed.
+func diffSourceLine(d *editor.DiffState) int {
+	line := d.CursorPos().Line
+	if d.ActiveSide() == editor.DiffNew {
+		return line
+	}
+	shift := 0
+	for _, h := range d.Hunks() {
+		if line < h.OldStart {
+			break
+		}
+		if line < h.OldEnd {
+			return h.NewStart
+		}
+		shift = h.NewEnd - h.OldEnd
+	}
+	return line + shift
 }
 
 // diffArmed tells whether a press in dir is the second past the end.
@@ -189,6 +224,10 @@ func (a *App) diffPage(c *ui.Context, k *colors, t *tab) {
 				c.Key(icon)
 				diffNavButton(c, k, icon, label, can, func() { a.diffStep(t, dir) })
 			}
+			c.Key("diff-source")
+			diffNavButton(c, k, "pencil", "Jump to Source", diffHasSource(t.diff), func() {
+				a.openAt(t.diffRel, diffSourceLine(t.diff))
+			})
 			switch {
 			case diffArmed(t, 1):
 				ui.Text(c, "Click again for next file").FontSize(11.5).TextColor(k.textMuted).SingleLine()

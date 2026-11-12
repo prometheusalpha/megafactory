@@ -4,6 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"megafactory/internal/git"
@@ -141,10 +143,12 @@ func TestDiffStepAcrossFiles(t *testing.T) {
 	if diffStepHunk(dt.diff, -1) >= 0 || a.diffNeighbor("a.txt", -1) != "" {
 		t.Error("the first file's top can step back")
 	}
-	a.diffStep(dt, 1)
+	if hunk() != 0 {
+		t.Fatalf("opened at hunk %d, want the first", hunk())
+	}
 	a.diffStep(dt, 1)
 	if hunk() != 1 {
-		t.Fatalf("after two steps at hunk %d, want 1", hunk())
+		t.Fatalf("after a step at hunk %d, want 1", hunk())
 	}
 	a.diffStep(dt, 1)
 	if dt.diffRel != "a.txt" || !diffArmed(dt, 1) {
@@ -166,5 +170,88 @@ func TestDiffStepAcrossFiles(t *testing.T) {
 	a.diffStep(dt, -1)
 	if dt.diffRel != "a.txt" || hunk() != 1 {
 		t.Fatalf("back: rel %q hunk %d, want a.txt at its last change", dt.diffRel, hunk())
+	}
+}
+
+// Jump to Source opens the working file at the caret's line, mapping a line
+// of the old side past the lines the changes above it added.
+func TestDiffJumpToSource(t *testing.T) {
+	dir, rel, _, _ := diffRepo(t)
+	working := "one\nNEW\nMORE\nTWO\nthree\n"
+	if err := os.WriteFile(filepath.Join(dir, rel), []byte(working), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := diffApp(t, dir, rel, working)
+	a.tabs = nil // the file opens from the jump
+	a.openDiff(rel)
+	dt := a.tabs[a.active]
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.Frame()
+
+	// The caret on the old side's "three", its line 2, is on the working
+	// file's line 4: the change above it turned one line into three.
+	var old ui.Rect
+	for _, n := range tt.AccessAll() {
+		if n.Role == ui.RoleTextField && n.Bounds.X < 400 && n.Bounds.W > 0 {
+			old = n.Bounds
+		}
+	}
+	if old.W == 0 {
+		t.Fatal("no old side")
+	}
+	top := float32(dt.diff.LineTop(editor.DiffOld, 2) - dt.diff.ScrollY())
+	tt.ClickAt(old.X+old.W-20, old.Y+top+4)
+	tt.Frame()
+	if dt.diff.ActiveSide() != editor.DiffOld || dt.diff.CursorPos().Line != 2 {
+		t.Fatalf("the click left side %v line %d", dt.diff.ActiveSide(), dt.diff.CursorPos().Line)
+	}
+	if got := diffSourceLine(dt.diff); got != 4 {
+		t.Errorf("old side line 2 maps to %d, want 4", got)
+	}
+	src, ok := tt.AccessByRole(ui.RoleButton, "Jump to Source")
+	if !ok {
+		t.Fatal("no Jump to Source button")
+	}
+	tt.ClickAt(src.Bounds.X+src.Bounds.W/2, src.Bounds.Y+src.Bounds.H/2)
+	tt.Frame()
+	tt.Frame()
+	ft := a.tabs[a.active]
+	if ft.path != rel || ft.ed == nil {
+		t.Fatalf("the jump showed %q", ft.path)
+	}
+	if line := ft.ed.CursorPos().Line; line != 4 {
+		t.Errorf("the file's caret is on line %d, want 4", line)
+	}
+}
+
+// A diff opens with the caret on its first change, rather than at the top.
+func TestOpenDiffGoesToFirstChange(t *testing.T) {
+	dir, rel, _, _ := diffRepo(t)
+	var lines, edited []string
+	for i := range 300 {
+		lines = append(lines, strconv.Itoa(i))
+	}
+	edited = append(edited, lines...)
+	edited[200] = "changed"
+	committed := strings.Join(lines, "\n") + "\n"
+	working := strings.Join(edited, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(dir, rel), []byte(committed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "-c", "commit.gpgsign=false", "commit", "-q", "-am", "long")
+	if err := os.WriteFile(filepath.Join(dir, rel), []byte(working), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := diffApp(t, dir, rel, working)
+	a.openDiff(rel)
+	dt := a.tabs[a.active]
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.Frame()
+	tt.Frame()
+	if i, inside := dt.diff.CurrentHunk(); i != 0 || !inside {
+		t.Errorf("the caret is in hunk %d (inside %v), want the first", i, inside)
+	}
+	if line := dt.diff.CursorPos().Line; line != 200 {
+		t.Errorf("the caret is on line %d, want 200", line)
 	}
 }
