@@ -811,7 +811,7 @@ func (a *App) editorCard(c *ui.Context, k *colors) ui.Element {
 			} else {
 				// GoTo already scrolls the line to the middle; a ScrollTo
 				// after it would pull the line up to the top.
-				cur.ed.GoTo(editor.Pos{Line: at.line})
+				cur.ed.GoTo(editor.Pos{Line: at.line, Col: at.col})
 			}
 		}
 	})

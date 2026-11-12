@@ -290,7 +290,10 @@ func TestJavaEditorFeatures(t *testing.T) {
 	if offset < 0 {
 		t.Fatal("hello() not found")
 	}
+	// The server's location is the name's, where the caret goes.
+	offset += len("public String ")
 	line := bytes.Count(data[:offset], []byte("\n"))
+	col := offset - (bytes.LastIndexByte(data[:offset], '\n') + 1)
 	f.define = func(string, int) ([]javalang.Location, error) {
 		return []javalang.Location{{Path: hello, Start: offset}}, nil
 	}
@@ -299,8 +302,8 @@ func TestJavaEditorFeatures(t *testing.T) {
 	if a.tabs[a.active].path != helloRel {
 		t.Fatalf("definition opened %q, want %q", a.tabs[a.active].path, helloRel)
 	}
-	if got := a.tabs[a.active].ed.CursorPos().Line; got != line {
-		t.Errorf("caret on line %d, want %d", got, line)
+	if got := a.tabs[a.active].ed.CursorPos(); got != (editor.Pos{Line: line, Col: col}) {
+		t.Errorf("caret at %+v, want line %d col %d", got, line, col)
 	}
 }
 

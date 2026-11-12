@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -867,7 +868,7 @@ type openLine struct {
 	path string
 	line int
 	// col and n select n bytes from byte col of the line, as a search's
-	// match; n 0 puts the caret at the line's start.
+	// match; n 0 puts the caret at col, as on a definition's name.
 	col, n int
 }
 
@@ -1039,6 +1040,7 @@ func (a *App) javaGoTo(t *tab, offset int, anyImpl bool) {
 			}
 		}
 		line := lineOfBytes(data, loc.Start)
+		col := loc.Start - (bytes.LastIndexByte(data[:min(max(loc.Start, 0), len(data))], '\n') + 1)
 		return func() {
 			if j.srv != srv || !a.tabActive(t) || t.ed.Buffer.Version() != version {
 				return
@@ -1047,7 +1049,7 @@ func (a *App) javaGoTo(t *tab, offset int, anyImpl bool) {
 			if !ok {
 				return
 			}
-			a.openAt(rel, line)
+			a.openSpan(openLine{path: rel, line: line, col: col})
 		}
 	})
 }
