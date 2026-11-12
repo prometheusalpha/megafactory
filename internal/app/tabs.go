@@ -16,6 +16,28 @@ func (a *App) SaveActive() {
 	}
 }
 
+// copyReference copies where the active file's caret or selection is, as
+// path:line or path:first-last, the path from the project's root.
+func (a *App) copyReference(svc ui.Services) {
+	if t := a.activeTab(); t != nil && t.ed != nil {
+		svc.WriteClipboard(reference(t.path, t.ed.Buffer, t.ed.Selection()))
+	}
+}
+
+// reference is a selection's lines in path, counted from 1. A selection
+// that ends at the start of a line, as one of whole lines does, leaves
+// that line out.
+func reference(path string, b *editor.Buffer, s editor.Selection) string {
+	first, last := b.Pos(s.Start()), b.Pos(s.End())
+	if last.Line > first.Line && last.Col == 0 {
+		last.Line--
+	}
+	if last.Line == first.Line {
+		return fmt.Sprintf("%s:%d", path, first.Line+1)
+	}
+	return fmt.Sprintf("%s:%d-%d", path, first.Line+1, last.Line+1)
+}
+
 // save writes a tab's text, as it is now, off the UI thread, then calls
 // then. Edits made while it writes keep the tab modified.
 func (a *App) save(t *tab, then func()) {

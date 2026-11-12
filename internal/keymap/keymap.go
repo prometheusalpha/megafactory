@@ -38,6 +38,7 @@ var Actions = []Action{
 	{"recentProjects", "Recent Projects", Binding{ui.Cmd | ui.Alt, ui.KeyR}},
 	{"togglePanel", "Toggle Bottom Panel", Binding{ui.Ctrl, ui.KeyBackquote}},
 	{"goToImplementation", "Go to Implementation", Binding{ui.Cmd | ui.Shift, ui.KeyI}},
+	{"copyReference", "Copy Reference", Binding{ui.Ctrl | ui.Shift, ui.KeyC}},
 	{"run", "Run / Rerun", Binding{ui.Ctrl, ui.KeyR}},
 	{"debug", "Debug", Binding{ui.Ctrl, ui.KeyD}},
 	{"stop", "Stop", Binding{ui.Ctrl, ui.KeyS}},

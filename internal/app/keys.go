@@ -8,7 +8,7 @@ import (
 
 // keyActions is what each keymap.Action does. An action not here is bound
 // but does nothing yet.
-func (a *App) keyActions() map[string]func() {
+func (a *App) keyActions(svc ui.Services) map[string]func() {
 	return map[string]func(){
 		"closeTab":           a.CloseActive,
 		"closeOtherTabs":     a.CloseOtherTabs,
@@ -19,6 +19,7 @@ func (a *App) keyActions() map[string]func() {
 		"recentProjects":     a.OpenRecentPalette,
 		"togglePanel":        func() { a.showBottom = !a.showBottom },
 		"goToImplementation": a.GoToImplementation,
+		"copyReference":      func() { a.copyReference(svc) },
 		// A new run hangs up the live one, so Run is Rerun as well.
 		"run":   a.runCurrent,
 		"debug": a.startDebug,
@@ -29,7 +30,7 @@ func (a *App) keyActions() map[string]func() {
 // keyShortcuts declares the window's shortcut of each action as the keymap
 // binds it now.
 func (a *App) keyShortcuts(c *ui.Context) {
-	do := a.keyActions()
+	do := a.keyActions(c.Services())
 	for _, act := range keymap.Actions {
 		if b := a.keys.Binding(act.ID); !b.Zero() && do[act.ID] != nil {
 			c.OnShortcut(b.Mods, b.Key, do[act.ID])
