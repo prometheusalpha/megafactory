@@ -1,6 +1,7 @@
 package app
 
 import (
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,6 +18,7 @@ type gitService struct {
 	ok         bool
 	head       string
 	changes    []git.Status
+	marks      gitMarks
 	err        error
 	loading    bool
 	refs       []git.Ref
@@ -68,7 +70,7 @@ func (a *App) gitRefresh() {
 			if !ok {
 				a.git.repo = git.Repo{}
 				a.git.ok = false
-				a.git.changes, a.git.head, a.git.err = nil, "", nil
+				a.git.changes, a.git.marks, a.git.head, a.git.err = nil, gitMarks{}, "", nil
 				return // a.branch belongs to the project that was here
 			}
 			a.git.repo = repo
@@ -78,12 +80,13 @@ func (a *App) gitRefresh() {
 			}
 			if err != nil {
 				a.git.err = err
-				a.git.changes, a.git.head = nil, ""
+				a.git.changes, a.git.marks, a.git.head = nil, gitMarks{}, ""
 				return
 			}
 			prev := a.git.head
 			a.git.err = nil
 			a.git.changes = changes
+			a.git.marks = a.gitMarkTree(changes)
 			a.git.head = head
 			if head != prev {
 				a.gitHeadChanged()
@@ -190,6 +193,70 @@ func gitChangeOrder(kind git.Kind) int {
 		return 2
 	}
 	return 1
+}
+
+// gitMark is how the project tree tints a row: new files green,
+// modified ones yellow and conflicts red, as IntelliJ does.
+type gitMark int
+
+const (
+	markNone gitMark = iota
+	markNew
+	markModified
+	markConflict
+)
+
+// gitMarks maps a project-relative path to its mark, and holds the
+// untracked folders, which git reports as one entry for what they hold.
+type gitMarks struct {
+	paths   map[string]gitMark
+	newDirs []string
+}
+
+// gitMarkTree reads the changes into marks once per refresh, as
+// projectRel resolves symlinks. A folder takes the mark of what it holds,
+// conflict winning over modified, and modified over new.
+func (a *App) gitMarkTree(changes []git.Status) gitMarks {
+	m := gitMarks{paths: map[string]gitMark{}}
+	for _, s := range changes {
+		var mark gitMark
+		switch s.Kind() {
+		case git.Untracked, git.Added:
+			mark = markNew
+		case git.Modified:
+			mark = markModified
+		case git.Conflict:
+			mark = markConflict
+		default:
+			continue
+		}
+		rel := a.projectRel(strings.TrimSuffix(s.Path, "/"))
+		if rel == "" || rel == "." {
+			continue
+		}
+		if strings.HasSuffix(s.Path, "/") {
+			m.newDirs = append(m.newDirs, rel)
+		}
+		m.paths[rel] = max(m.paths[rel], mark)
+		for d := path.Dir(rel); d != "." && d != "/"; d = path.Dir(d) {
+			m.paths[d] = max(m.paths[d], mark)
+		}
+	}
+	return m
+}
+
+// of is the mark of a project-relative path, which is new too inside a
+// folder git reports as untracked.
+func (m gitMarks) of(rel string) gitMark {
+	if mark, ok := m.paths[rel]; ok {
+		return mark
+	}
+	for _, d := range m.newDirs {
+		if strings.HasPrefix(rel, d+"/") {
+			return markNew
+		}
+	}
+	return markNone
 }
 
 func gitChangeLabel(c *ui.Context, kind git.Kind) (string, ui.Color) {

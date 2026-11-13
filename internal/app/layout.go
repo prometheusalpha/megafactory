@@ -625,6 +625,18 @@ func (a *App) tree(c *ui.Context, k *colors) {
 		iconCol, textCol := k.iconMuted, k.text
 		if n.ignored {
 			iconCol, textCol = k.iconMuted.Alpha(0.5), k.textFaint
+		} else {
+			switch a.git.marks.of(n.path) {
+			case markNew:
+				iconCol = c.Theme().Success
+				textCol = iconCol
+			case markModified:
+				iconCol = c.Theme().Warning
+				textCol = iconCol
+			case markConflict:
+				iconCol = c.Theme().Danger
+				textCol = iconCol
+			}
 		}
 		row.Children(func() {
 			if n.dir {
