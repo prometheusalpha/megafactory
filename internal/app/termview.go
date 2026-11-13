@@ -164,7 +164,30 @@ func (a *App) newTerm() {
 	project := a.project
 	tab := &termTab{}
 	opts := terminal.Options{
-		Dir:       project,
+		Dir: project,
+		// Option is Meta, so Option+Backspace reaches the shell as Esc DEL.
+		OptionAsAlt: true,
+		OnKey: func(mods ui.Modifiers, key ui.Key) bool {
+			// The encoder sends Option+arrow as a CSI sequence that zsh and
+			// readline leave unbound, so send the Esc b / Esc f they bind to
+			// word motion, as Terminal.app does.
+			if mods != ui.Alt || tab.term == nil {
+				return false
+			}
+			live, ok := tab.term.(LiveTerm)
+			if !ok {
+				return false
+			}
+			switch key {
+			case ui.KeyLeft:
+				live.T.Send([]byte("\x1bb"))
+			case ui.KeyRight:
+				live.T.Send([]byte("\x1bf"))
+			default:
+				return false
+			}
+			return true
+		},
 		Font:      code.terminalFont(),
 		Theme:     themes.light,
 		DarkTheme: themes.dark,
