@@ -117,9 +117,11 @@ func (r Repo) Head() (string, error) {
 
 // Statuses lists changed paths, repo-root-relative with forward slashes. In
 // -z form a rename/copy emits an extra bare record holding the origin path;
-// consume it and keep the new path as Status.Path.
+// consume it and keep the new path as Status.Path. Untracked folders are
+// expanded to their files: "normal" would report one "dir/" entry that has
+// no content to diff and no rows to open.
 func (r Repo) Statuses() ([]Status, error) {
-	out, err := r.run("status", "--porcelain=v1", "-z", "--untracked-files=normal")
+	out, err := r.run("status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if err != nil {
 		return nil, err
 	}

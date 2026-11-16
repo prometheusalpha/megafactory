@@ -125,6 +125,28 @@ func TestStatuses(t *testing.T) {
 	}
 }
 
+func TestStatusesListsFilesInUntrackedFolder(t *testing.T) {
+	dir, repo := newTestRepo(t)
+	writeFile(t, dir, "pkg/v3/A.java", "a\n")
+	writeFile(t, dir, "pkg/v3/deep/B.java", "b\n")
+	st, err := repo.Statuses()
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath := map[string]Status{}
+	for _, s := range st {
+		byPath[s.Path] = s
+	}
+	for _, p := range []string{"pkg/v3/A.java", "pkg/v3/deep/B.java"} {
+		if s, ok := byPath[p]; !ok || s.Kind() != Untracked {
+			t.Errorf("%s = %+v (present %v), want Untracked", p, s, ok)
+		}
+	}
+	if _, ok := byPath["pkg/"]; ok {
+		t.Error("folder reported as one entry, want its files")
+	}
+}
+
 func TestStatusesRename(t *testing.T) {
 	dir, repo := newTestRepo(t)
 	writeFile(t, dir, "old.txt", "content\n")
