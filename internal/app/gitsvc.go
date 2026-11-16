@@ -206,11 +206,9 @@ const (
 	markConflict
 )
 
-// gitMarks maps a project-relative path to its mark, and holds the
-// untracked folders, which git reports as one entry for what they hold.
+// gitMarks maps a project-relative path to its mark.
 type gitMarks struct {
-	paths   map[string]gitMark
-	newDirs []string
+	paths map[string]gitMark
 }
 
 // gitMarkTree reads the changes into marks once per refresh, as
@@ -230,12 +228,9 @@ func (a *App) gitMarkTree(changes []git.Status) gitMarks {
 		default:
 			continue
 		}
-		rel := a.projectRel(strings.TrimSuffix(s.Path, "/"))
+		rel := a.projectRel(s.Path)
 		if rel == "" || rel == "." {
 			continue
-		}
-		if strings.HasSuffix(s.Path, "/") {
-			m.newDirs = append(m.newDirs, rel)
 		}
 		m.paths[rel] = max(m.paths[rel], mark)
 		for d := path.Dir(rel); d != "." && d != "/"; d = path.Dir(d) {
@@ -245,18 +240,9 @@ func (a *App) gitMarkTree(changes []git.Status) gitMarks {
 	return m
 }
 
-// of is the mark of a project-relative path, which is new too inside a
-// folder git reports as untracked.
+// of is the mark of a project-relative path.
 func (m gitMarks) of(rel string) gitMark {
-	if mark, ok := m.paths[rel]; ok {
-		return mark
-	}
-	for _, d := range m.newDirs {
-		if strings.HasPrefix(rel, d+"/") {
-			return markNew
-		}
-	}
-	return markNone
+	return m.paths[rel]
 }
 
 func gitChangeLabel(c *ui.Context, kind git.Kind) (string, ui.Color) {
