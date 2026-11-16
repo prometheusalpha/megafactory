@@ -255,3 +255,22 @@ func TestOpenDiffGoesToFirstChange(t *testing.T) {
 		t.Errorf("the caret is on line %d, want 200", line)
 	}
 }
+
+func TestDiffLayoutChoiceIsKept(t *testing.T) {
+	defer func(d string) { dataDir = d }(dataDir)
+	dataDir = t.TempDir()
+	defer func() { prefs = defaultSettings }()
+
+	d := &editor.DiffState{Layout: editor.DiffSplit}
+	chooseDiffLayout(d, true)
+	if d.Layout != editor.DiffUnified || !prefs.DiffUnified {
+		t.Fatalf("Layout = %v, prefs.DiffUnified = %v; want unified for both", d.Layout, prefs.DiffUnified)
+	}
+	if !LoadSettings().DiffUnified {
+		t.Error("choice was not written to settings.json")
+	}
+	chooseDiffLayout(d, false)
+	if d.Layout != editor.DiffSplit || LoadSettings().DiffUnified {
+		t.Error("choosing Split did not take back the unified choice")
+	}
+}

@@ -83,7 +83,7 @@ func (a *App) loadDiff(rel string, show func(d *editor.DiffState)) {
 			show(&editor.DiffState{
 				Old:      editor.NewBuffer(oldText),
 				New:      editor.NewBuffer(string(data)),
-				Layout:   editor.DiffSplit,
+				Layout:   diffLayout(prefs.DiffUnified),
 				Inline:   editor.DiffInlineWord,
 				Editable: false,
 				// Room below the last line, so that a change near the end
@@ -147,8 +147,7 @@ func (a *App) diffStep(t *tab, dir int) {
 		if !slices.Contains(a.tabs, t) {
 			return
 		}
-		// The new file keeps the layout the user picked for this one.
-		d.Layout, d.SplitPercent = t.diff.Layout, t.diff.SplitPercent
+		d.SplitPercent = t.diff.SplitPercent
 		t.path, t.name, t.diffRel, t.diff = diffPath(next), diffName(next), next, d
 		if dir > 0 {
 			d.GoToHunk(0)
@@ -237,16 +236,31 @@ func (a *App) diffPage(c *ui.Context, k *colors, t *tab) {
 			})
 			c.Key("diff-split")
 			diffLayoutButton(c, k, "Split", t.diff.Layout == editor.DiffSplit, func() {
-				t.diff.Layout = editor.DiffSplit
+				chooseDiffLayout(t.diff, false)
 			})
 			c.Key("diff-unified")
 			diffLayoutButton(c, k, "Unified", t.diff.Layout == editor.DiffUnified, func() {
-				t.diff.Layout = editor.DiffUnified
+				chooseDiffLayout(t.diff, true)
 			})
 		})
 		c.Key("diff-view:" + t.diffRel)
 		editor.DiffView(c, t.diff).Grow(1).MinHeight(0).FillWidth()
 	})
+}
+
+func diffLayout(unified bool) editor.DiffLayout {
+	if unified {
+		return editor.DiffUnified
+	}
+	return editor.DiffSplit
+}
+
+// chooseDiffLayout sets d's layout and keeps it as the one every diff
+// opens in, across files and restarts.
+func chooseDiffLayout(d *editor.DiffState, unified bool) {
+	d.Layout = diffLayout(unified)
+	prefs.DiffUnified = unified
+	saveSettings()
 }
 
 // diffLayoutButton is a small text button of the diff header, raised for

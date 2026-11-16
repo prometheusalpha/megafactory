@@ -38,6 +38,9 @@ type Settings struct {
 	// passed since its last edit.
 	AutoSave      bool    `json:"autoSave"`
 	AutoSaveDelay float32 `json:"autoSaveDelay"`
+	// DiffUnified is the layout the diff viewer opens in, picked by its
+	// Split and Unified buttons: false is side by side.
+	DiffUnified bool `json:"diffUnified"`
 	// Keymap holds the shortcuts the user rebound, by keymap.Action ID;
 	// an action not in it keeps its default.
 	Keymap map[string]string `json:"keymap,omitempty"`
