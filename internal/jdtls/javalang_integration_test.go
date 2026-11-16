@@ -100,6 +100,7 @@ public class A {
         System.out.println("hi");
         int x = "bad";
         Helper h = null;
+        List<String> names = null;
         System.out.println(h);
     }
 }
@@ -252,6 +253,45 @@ class Helper {}
 		return false
 	})
 	t.Logf("Helper defined at %s:%d", filepath.Base(defined.Path), helperLine)
+
+	// The quick fix of the List that is not imported puts its import in.
+	listAt := strings.Index(source, "List<String>")
+	var fixes []javalang.Action
+	waitUntil(t, "an import quick fix for List", 3*time.Minute, func() bool {
+		ds := []javalang.Diagnostic{}
+		for {
+			select {
+			case ev := <-diags:
+				if filepath.Clean(ev.path) == filepath.Clean(javaPath) {
+					ds = ev.ds
+				}
+				continue
+			default:
+			}
+			break
+		}
+		if len(ds) == 0 {
+			return false
+		}
+		var at []javalang.Diagnostic
+		for _, d := range ds {
+			if d.Start <= listAt && listAt <= d.End {
+				at = append(at, d)
+			}
+		}
+		got, err := session.CodeActions(javaPath, snap.Version(), listAt, listAt, at)
+		if err != nil {
+			return false
+		}
+		for _, a := range got {
+			if strings.HasPrefix(a.Title, "Import 'List' (java.util)") {
+				fixes = got
+				return true
+			}
+		}
+		return false
+	})
+	t.Logf("%d quick fixes for List", len(fixes))
 
 	if err := session.Save(javaPath); err != nil {
 		t.Errorf("save: %v", err)
