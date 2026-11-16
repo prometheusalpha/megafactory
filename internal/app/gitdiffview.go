@@ -215,6 +215,13 @@ func (a *App) diffPage(c *ui.Context, k *colors, t *tab) {
 	ui.Column(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
 		ui.Row(c).Height(headerH).Padding(0, 10).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, t.diffRel).FontSize(12.5).FontWeight(600).TextColor(k.text).SingleLine()
+			switch {
+			case diffArmed(t, 1):
+				ui.Text(c, "Click again for next file").FontSize(11.5).TextColor(k.textMuted).SingleLine()
+			case diffArmed(t, -1):
+				ui.Text(c, "Click again for previous file").FontSize(11.5).TextColor(k.textMuted).SingleLine()
+			}
+			ui.Spacer(c)
 			for _, dir := range []int{-1, 1} {
 				icon, label := "arrow-up", "Previous Difference"
 				if dir > 0 {
@@ -228,13 +235,6 @@ func (a *App) diffPage(c *ui.Context, k *colors, t *tab) {
 			diffNavButton(c, k, "pencil", "Jump to Source", diffHasSource(t.diff), func() {
 				a.openAt(t.diffRel, diffSourceLine(t.diff))
 			})
-			switch {
-			case diffArmed(t, 1):
-				ui.Text(c, "Click again for next file").FontSize(11.5).TextColor(k.textMuted).SingleLine()
-			case diffArmed(t, -1):
-				ui.Text(c, "Click again for previous file").FontSize(11.5).TextColor(k.textMuted).SingleLine()
-			}
-			ui.Spacer(c)
 			c.Key("diff-split")
 			diffLayoutButton(c, k, "Split", t.diff.Layout == editor.DiffSplit, func() {
 				t.diff.Layout = editor.DiffSplit
