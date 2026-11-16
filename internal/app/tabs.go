@@ -38,6 +38,30 @@ func reference(path string, b *editor.Buffer, s editor.Selection) string {
 	return fmt.Sprintf("%s:%d-%d", path, first.Line+1, last.Line+1)
 }
 
+// saveModified writes every modified tab, then calls then: a run builds
+// from the files on disk, which an edit still in a buffer is not in. A
+// save that fails shows its error and leaves then uncalled.
+func (a *App) saveModified(then func()) {
+	var dirty []*tab
+	for _, t := range a.tabs {
+		if t.ed != nil && t.ed.Buffer.Modified() {
+			dirty = append(dirty, t)
+		}
+	}
+	if len(dirty) == 0 {
+		then()
+		return
+	}
+	left := len(dirty)
+	for _, t := range dirty {
+		a.save(t, func() {
+			if left--; left == 0 {
+				then()
+			}
+		})
+	}
+}
+
 // save writes a tab's text, as it is now, off the UI thread, then calls
 // then. Edits made while it writes keep the tab modified.
 func (a *App) save(t *tab, then func()) {

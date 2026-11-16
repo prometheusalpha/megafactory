@@ -145,12 +145,14 @@ type App struct {
 	termErr      error
 
 	// runConfig is the id of the configuration the toolbar selected.
-	runConfig   string
-	runStore    *runcfg.Store
-	runEdit     *runEditState
-	runConsole  *runConsoleState
-	runProc     *runner.Process
-	runGen      int
+	runConfig  string
+	runStore   *runcfg.Store
+	runEdit    *runEditState
+	runConsole *runConsoleState
+	runProc    *runner.Process
+	runGen     int
+	// runStarting is the generation of the run being started, 0 for none.
+	runStarting int
 	mainClasses []javalang.MainClass
 
 	recent  []string // the projects opened last, the most recent first
@@ -365,14 +367,20 @@ func (a *App) titleBar(c *ui.Context, k *colors) {
 		ui.Row(c).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
 			// While a process runs, Run becomes Rerun and Stop lights up, so
 			// the pair says what is live without a separate Rerun button.
-			if a.runProc != nil {
+			// A run or a debug being started shows a spinner in place of its
+			// button, which takes no click until it has started: Stop ends it.
+			if a.runBusy() {
+				busyButton(c, k, "Starting Run…", 30, 16)
+			} else if a.runProc != nil {
 				if solidIconButton(c, "rotate-cw", "Rerun", c.Theme().Success, 30, 16).Tooltip(shortcutTip("Rerun", a.keys.Binding("run"))).Clicked() {
 					a.rerun()
 				}
 			} else if iconButton(c, k, "play", "Run", 30, 16).Tooltip(shortcutTip("Run", a.keys.Binding("run"))).Clicked() {
 				a.runCurrent()
 			}
-			if iconButton(c, k, "bug", "Debug", 30, 17).Tooltip(shortcutTip("Debug", a.keys.Binding("debug"))).Clicked() {
+			if a.debug.phase == debugStarting {
+				busyButton(c, k, "Starting Debug…", 30, 17)
+			} else if iconButton(c, k, "bug", "Debug", 30, 17).Tooltip(shortcutTip("Debug", a.keys.Binding("debug"))).Clicked() {
 				a.startDebug()
 			}
 			if a.runProc != nil || a.debug.live() {

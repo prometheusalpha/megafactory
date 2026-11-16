@@ -48,6 +48,11 @@ type fakeJava struct {
 	classPaths  [][]string
 	resolveErr  error
 	resolved    string
+	// built is what BuildWorkspace was asked for; buildStatus and buildErr
+	// are its answer, a success when unset.
+	built       string
+	buildStatus javalang.BuildStatus
+	buildErr    error
 
 	// debugPort is what startDebugSession answers; 0 fails the session.
 	debugPort int
@@ -147,6 +152,11 @@ func (f *fakeJava) BuildFilesChanged(paths ...string) error {
 
 func (f *fakeJava) ResolveMainClasses() ([]javalang.MainClass, error) {
 	return f.mainClasses, f.resolveErr
+}
+
+func (f *fakeJava) BuildWorkspace(mainClass, projectName string) (javalang.BuildStatus, error) {
+	f.built = mainClass + "/" + projectName
+	return f.buildStatus, f.buildErr
 }
 
 func (f *fakeJava) ResolveClasspath(mainClass, projectName string) ([]string, []string, error) {

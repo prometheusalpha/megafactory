@@ -2,7 +2,9 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/editor"
 )
 
 // fakeTerm is a terminal a test shows instead of libghostty's.
@@ -280,6 +283,125 @@ func TestRunConfigResolvesClasspathThroughJavaDebug(t *testing.T) {
 	}
 	if len(mods) != 1 || mods[0] != "/mods" || len(classes) != 2 {
 		t.Errorf("mods %v classes %v", mods, classes)
+	}
+}
+
+// A run builds the project first, and the classpath is asked of the build's
+// output: a class of a file changed behind jdtls's back is old otherwise.
+func TestRunConfigBuildsBeforeResolvingClasspath(t *testing.T) {
+	a, _, _ := phase4App(t)
+	f := &fakeJava{
+		mainClasses: []javalang.MainClass{{MainClass: "com.example.demo.DemoApplication", ProjectName: "demo"}},
+		classPaths:  [][]string{{}, {"/classes"}},
+	}
+	r := appResolver{app: a, project: a.project, srv: f}
+	if _, _, _, err := r.Classpath("com.example.demo.DemoApplication"); err != nil {
+		t.Fatal(err)
+	}
+	if f.built != "com.example.demo.DemoApplication/demo" {
+		t.Errorf("built %q", f.built)
+	}
+	if f.resolved == "" {
+		t.Error("the classpath was not asked after a successful build")
+	}
+}
+
+// A build that does not end well runs nothing: the classes it left are not
+// the code the user sees.
+func TestRunConfigRefusesAFailedBuild(t *testing.T) {
+	for name, tc := range map[string]struct {
+		status javalang.BuildStatus
+		err    error
+		want   string
+	}{
+		"compile errors": {javalang.BuildWithErrors, nil, "compile errors"},
+		"failed":         {javalang.BuildFailed, nil, "build failed"},
+		"cancelled":      {javalang.BuildCancelled, nil, "cancelled"},
+		"server error":   {javalang.BuildSucceeded, errors.New("boom"), "boom"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			a, _, _ := phase4App(t)
+			f := &fakeJava{
+				mainClasses: []javalang.MainClass{{MainClass: "com.example.demo.DemoApplication", ProjectName: "demo"}},
+				classPaths:  [][]string{{}, {"/classes"}},
+				buildStatus: tc.status,
+				buildErr:    tc.err,
+			}
+			r := appResolver{app: a, project: a.project, srv: f}
+			_, _, _, err := r.Classpath("com.example.demo.DemoApplication")
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %v, want one saying %q", err, tc.want)
+			}
+			if f.resolved != "" {
+				t.Errorf("the classpath was asked (%q) after a build that did not succeed", f.resolved)
+			}
+		})
+	}
+}
+
+// What a run builds is on disk, so an edit still in a buffer is written
+// before the run starts.
+func TestRunSavesModifiedTabsFirst(t *testing.T) {
+	a, tt, proc := phase4App(t)
+	cfg, _ := a.runStore.Upsert(runcfg.Config{Name: "Demo", Kind: runcfg.Shell, Command: "echo demo"})
+	click(t, tt, "pom.xml")
+	tb := a.tabs[a.active]
+	tb.ed.Buffer.Edit(editor.Edit{Text: "unsaved-edit"})
+	a.startRun(cfg)
+	if tb.ed.Buffer.Modified() {
+		t.Error("the tab is still modified after the run started")
+	}
+	got, _ := os.ReadFile(filepath.Join(a.project, "pom.xml"))
+	if !strings.Contains(string(got), "unsaved-edit") {
+		t.Errorf("the edit is not on disk: %.40q", got)
+	}
+	if len(proc.spec.Argv) == 0 {
+		t.Error("the run did not start after saving")
+	}
+}
+
+// A run being started shows a spinner in place of the Run button, until it
+// has started or a Stop moves the generation on.
+func TestRunButtonSpinsWhileTheRunStarts(t *testing.T) {
+	a, tt, _ := phase4App(t)
+	tt.Frame()
+	if _, ok := tt.Find("Starting Run…"); ok {
+		t.Fatal("a spinner with no run starting")
+	}
+	a.runStarting = a.bumpRunGen()
+	tt.Frame()
+	if _, ok := tt.Find("Starting Run…"); !ok {
+		t.Error("no spinner while the run starts")
+	}
+	a.stopRun()
+	tt.Frame()
+	if _, ok := tt.Find("Starting Run…"); ok {
+		t.Error("the spinner outlives a Stop")
+	}
+}
+
+// Once resolved, the run is no longer starting: the spinner is not left on
+// by a run that failed or that has launched.
+func TestRunEndsStartingWhenResolved(t *testing.T) {
+	a, _, _ := phase4App(t)
+	cfg, _ := a.runStore.Upsert(runcfg.Config{Name: "Demo", Kind: runcfg.Shell, Command: "echo demo"})
+	a.startRun(cfg)
+	if a.runBusy() {
+		t.Error("still starting after the run launched")
+	}
+	bad, _ := a.runStore.Upsert(runcfg.Config{Name: "Bad", Kind: runcfg.Application, MainClass: "a.B"})
+	a.startRun(bad) // no language server: the run fails
+	if a.runBusy() {
+		t.Error("still starting after the run failed")
+	}
+}
+
+func TestDebugButtonSpinsWhileTheDebugStarts(t *testing.T) {
+	a, tt, _ := phase4App(t)
+	a.debug.phase = debugStarting
+	tt.Frame()
+	if _, ok := tt.Find("Starting Debug…"); !ok {
+		t.Error("no spinner while the debug starts")
 	}
 }
 

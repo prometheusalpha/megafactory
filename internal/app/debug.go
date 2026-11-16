@@ -272,6 +272,12 @@ func (a *App) startDebug() {
 // startDebugConfig launches cfg under java-debug: jdtls hands out the
 // adapter's port, and the adapter launches the JVM itself.
 func (a *App) startDebugConfig(cfg runcfg.Config) {
+	a.saveModified(func() { a.debugSaved(cfg) })
+}
+
+// debugSaved is startDebugConfig once every tab is on disk, which a build
+// reads.
+func (a *App) debugSaved(cfg runcfg.Config) {
 	if !cfg.Kind.Debuggable() {
 		a.host.ShowError("Can't debug "+cfg.Name, "Only Application and Spring Boot configurations run under the debugger.")
 		return

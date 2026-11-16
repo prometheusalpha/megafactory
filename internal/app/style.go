@@ -178,6 +178,16 @@ func iconButton(c *ui.Context, k *colors, name, label string, size, iconSize flo
 	return b
 }
 
+// busyButton is an iconButton whose icon is a spinner, for what is being
+// started: it has no face on hover and takes no click.
+func busyButton(c *ui.Context, k *colors, label string, size, spinSize float32) ui.Element {
+	b := ui.Box(c).Size(size, size).Center().Label(label).Tooltip(label)
+	b.Children(func() {
+		ui.Spinner(c).Size(spinSize, spinSize).TextColor(k.text)
+	})
+	return b
+}
+
 // solidIconButton is an iconButton filled with bg, for a button that
 // stands out while what it controls is live.
 func solidIconButton(c *ui.Context, name, label string, bg ui.Color, size, iconSize float32) ui.Element {

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"megafactory/internal/build"
+	"megafactory/internal/javalang"
 	"megafactory/internal/jdk"
 	"megafactory/internal/runcfg"
 	"megafactory/internal/runner"
@@ -157,6 +158,21 @@ func (r appResolver) Classpath(mainClass string) (string, []string, []string, er
 	if project == "" && len(classes) > 0 {
 		project = classes[0].ProjectName
 	}
+	// What runs is jdtls's output, which a file changed behind its back
+	// (another tool, a checkout) has not reached: build it afresh, and run
+	// nothing that does not compile.
+	status, err := r.srv.BuildWorkspace(mainClass, project)
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("the build failed: %w", err)
+	}
+	switch status {
+	case javalang.BuildWithErrors:
+		return "", nil, nil, errors.New("the project has compile errors, see Problems")
+	case javalang.BuildFailed:
+		return "", nil, nil, errors.New("the build failed")
+	case javalang.BuildCancelled:
+		return "", nil, nil, errors.New("the build was cancelled")
+	}
 	modules, classpath, err := r.srv.ResolveClasspath(mainClass, project)
 	return project, modules, classpath, err
 }
@@ -190,14 +206,24 @@ func (a *App) runCurrent() {
 }
 
 func (a *App) startRun(cfg runcfg.Config) {
+	a.saveModified(func() { a.runSaved(cfg) })
+}
+
+// runSaved is startRun once every tab is on disk, which a build reads.
+func (a *App) runSaved(cfg runcfg.Config) {
 	gen := a.bumpRunGen()
+	a.runStarting = gen
 	project, srv := a.project, a.java.srv
 	bp, _ := build.Detect(project)
 	r := appResolver{app: a, project: project, srv: srv, build: bp}
 	a.host.Run(func() func() {
 		cmd, err := runcfg.Resolve(cfg, r)
 		return func() {
-			if gen != a.runGen || a.project != project {
+			if gen != a.runGen {
+				return
+			}
+			a.runStarting = 0
+			if a.project != project {
 				return
 			}
 			if err != nil {
@@ -208,6 +234,11 @@ func (a *App) startRun(cfg runcfg.Config) {
 		}
 	})
 }
+
+// runBusy reports a run that is starting, which its build and the lookup
+// of its classpath take time to do. A Stop or a newer run moves runGen on,
+// which ends it here though the work goes on unseen.
+func (a *App) runBusy() bool { return a.runStarting != 0 && a.runStarting == a.runGen }
 
 func (a *App) bumpRunGen() int {
 	a.runGen++
