@@ -594,6 +594,11 @@ func (a *App) tree(c *ui.Context, k *colors) {
 			row.Background(k.selected)
 		} else if row.Hovered() {
 			row.Background(k.hover)
+		} else if isTestPath(n.path) {
+			row.Background(testTint(c))
+		}
+		if isTestPath(n.path) {
+			row.Radius(0)
 		}
 		renaming := a.edit != nil && a.edit.node == n
 		if row.Clicked() && !renaming {

@@ -57,6 +57,7 @@ func (a *App) showPicker(t *tab, offset int, list *picker.List) {
 		chosen := list.Build(c, panel, picker.Style{
 			Panel: k.dialog, Border: k.panelBorder, Shadow: k.shadowFocused,
 			Text: k.text, Muted: k.textMuted, Faint: k.textFaint, Hover: k.hover, Selected: k.selected,
+			Test: testTint(c), IsTest: func(rel string) bool { return isTestPath(filepath.ToSlash(rel)) },
 			CodeFamily: font.Family, CodeSize: font.Size - 1,
 		})
 		if chosen >= 0 {

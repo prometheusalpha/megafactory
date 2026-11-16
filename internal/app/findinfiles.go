@@ -221,6 +221,11 @@ func (a *App) findRow(c *ui.Context, k *colors, p *findInFiles, i int, m search.
 		}
 	} else if row.Hovered() {
 		row.Background(k.hover)
+	} else if isTestPath(m.Path) {
+		row.Background(testTint(c))
+	}
+	if isTestPath(m.Path) {
+		row.Radius(0)
 	}
 	row.Children(func() {
 		from, to := min(m.From, len(m.Text)), min(m.To, len(m.Text))

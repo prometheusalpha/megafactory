@@ -40,8 +40,11 @@ type Style struct {
 	Panel, Border, Shadow ui.Color
 	Text, Muted, Faint    ui.Color
 	Hover, Selected       ui.Color
-	CodeFamily            string
-	CodeSize              float32
+	// Test is the row background of a place IsTest says is a test's.
+	Test       ui.Color
+	IsTest     func(rel string) bool
+	CodeFamily string
+	CodeSize   float32
 }
 
 // rows is how many rows show before the list scrolls.
@@ -98,6 +101,7 @@ func (l *List) row(c *ui.Context, s Style, i int, it Item, h float32) bool {
 	at := path.Base(it.Rel) + ":" + strconv.Itoa(it.Line+1)
 	row := ui.Row(c).Height(h).Padding(0, 8).Gap(12).Radius(6).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(at).Tooltip(it.Rel)
+	test := s.IsTest != nil && s.IsTest(it.Rel)
 	if i == l.sel {
 		row.Background(s.Selected)
 		if l.shown != i {
@@ -106,6 +110,11 @@ func (l *List) row(c *ui.Context, s Style, i int, it Item, h float32) bool {
 		}
 	} else if row.Hovered() {
 		row.Background(s.Hover)
+	} else if test {
+		row.Background(s.Test)
+	}
+	if test {
+		row.Radius(0)
 	}
 	row.Children(func() {
 		ui.Text(c, it.Text).Font(s.CodeFamily).FontSize(s.CodeSize).TextColor(s.Text).SingleLine().Ellipsis("…").Shrink(1).Grow(1)

@@ -148,7 +148,7 @@ func (a *App) changesPage(c *ui.Context, k *colors) {
 		return
 	}
 	ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().Children(func() {
-		ui.Column(c).Padding(6).Gap(1).Children(func() {
+		ui.Column(c).Padding(6).Children(func() {
 			ui.Row(c).Height(30).Padding(0, 8, 0, 6).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Changes").FontSize(12).FontWeight(600).TextColor(k.textMuted).SingleLine()
 				ui.Spacer(c)
@@ -286,6 +286,11 @@ func (a *App) gitChangeRow(c *ui.Context, k *colors, s git.Status) {
 		Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(s.Path)
 	if row.Hovered() {
 		row.Background(k.hover)
+	} else if isTestPath(rel) {
+		row.Background(testTint(c))
+	}
+	if isTestPath(rel) {
+		row.Radius(0)
 	}
 	row.Children(func() {
 		ui.Box(c).Size(7, 7).Radius(3.5).Shrink(0).Background(col)
