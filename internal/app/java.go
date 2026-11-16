@@ -43,6 +43,7 @@ type langServer interface {
 	Definition(path string, offset int) ([]javalang.Location, error)
 	Implementation(path string, offset int) ([]javalang.Location, error)
 	References(path string, offset int) ([]javalang.Location, error)
+	CodeActions(path string, version uint64, start, end int, ds []javalang.Diagnostic) ([]javalang.Action, error)
 	BuildFilesChanged(paths ...string) error
 	ResolveMainClasses() ([]javalang.MainClass, error)
 	ResolveClasspath(mainClass, projectName string) (modules, classes []string, err error)

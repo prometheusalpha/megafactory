@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -725,18 +724,9 @@ func (s *Session) locations(raw json.RawMessage) []Location {
 // span converts a range to byte offsets: of the document's newest text if
 // it is open, else of the file on disk, as a definition may point anywhere.
 func (s *Session) span(path string, r textRange) (int, int, bool) {
-	s.mu.Lock()
-	doc := s.docs[path]
-	s.mu.Unlock()
-	var text Text
-	if doc != nil {
-		text = doc.newest()
-	} else {
-		src, err := os.ReadFile(path)
-		if err != nil {
-			return 0, 0, false
-		}
-		text = newRawText(src)
+	text, ok := s.textOf(path)
+	if !ok {
+		return 0, 0, false
 	}
 	return offsetAt(text, r.Start.Line, r.Start.Character), offsetAt(text, r.End.Line, r.End.Character), true
 }

@@ -39,6 +39,7 @@ type fakeJava struct {
 	hover     func(path string, offset int) (int, int, string, error)
 	define    func(path string, offset int) ([]javalang.Location, error)
 	implement func(path string, offset int) ([]javalang.Location, error)
+	actions   func(path string, version uint64, start, end int, ds []javalang.Diagnostic) ([]javalang.Action, error)
 	refer     func(path string, offset int) ([]javalang.Location, error)
 	asked     string
 	at        int
@@ -121,6 +122,13 @@ func (f *fakeJava) References(path string, offset int) ([]javalang.Location, err
 		return nil, nil
 	}
 	return f.refer(path, offset)
+}
+
+func (f *fakeJava) CodeActions(path string, version uint64, start, end int, ds []javalang.Diagnostic) ([]javalang.Action, error) {
+	if f.actions == nil {
+		return nil, nil
+	}
+	return f.actions(path, version, start, end, ds)
 }
 
 // Implementation is asked together with Definition, which records the

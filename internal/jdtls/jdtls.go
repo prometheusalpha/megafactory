@@ -199,6 +199,16 @@ func InitializeParams(project string, pid int, bundles []string, runtimes []jdk.
 				"implementation":     map[string]any{"linkSupport": false},
 				"references":         map[string]any{},
 				"publishDiagnostics": map[string]any{},
+				// Literals, so that the edits of a fix come with it; the
+				// kinds are the ones the quick fix list shows.
+				"codeAction": map[string]any{
+					"codeActionLiteralSupport": map[string]any{
+						"codeActionKind": map[string]any{
+							"valueSet": []string{"quickfix", "refactor", "source", "source.organizeImports"},
+						},
+					},
+					"isPreferredSupport": true,
+				},
 			},
 			"window": map[string]any{"workDoneProgress": true},
 		},

@@ -107,6 +107,7 @@ func appMenu(a *app.App, win *mygo.Window) *mygo.Menu {
 			item("Go to File…", "findFile", a.OpenFilePalette),
 			item("Find in Files…", "findInFiles", a.OpenFindInFiles),
 			item("Go to Implementation", "goToImplementation", a.GoToImplementation),
+			item("Quick Fix…", "quickFix", a.QuickFix),
 			mygo.Separator(),
 			item("Show Next Tab", "nextTab", a.NextTab),
 			item("Show Previous Tab", "prevTab", a.PrevTab),
