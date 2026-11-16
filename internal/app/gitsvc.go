@@ -293,6 +293,11 @@ func (a *App) gitChangeRow(c *ui.Context, k *colors, s git.Status) {
 			a.openDiff(rel)
 		}
 	})
+	row.ContextMenu(func(m *ui.Menu) {
+		if m.Item("Revert…").Disabled(rel == "" || s.Kind() == git.Conflict).Chosen() {
+			a.revertChange(s)
+		}
+	})
 }
 
 // gitRel turns a project-relative path into one relative to the repository

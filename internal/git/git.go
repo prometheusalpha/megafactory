@@ -50,8 +50,9 @@ const (
 	Conflict
 )
 
-// Status is one changed path. Code is git's two-character XY status.
-type Status struct{ Path, Code string }
+// Status is one changed path. Code is git's two-character XY status. Orig
+// is where a rename or copy came from.
+type Status struct{ Path, Code, Orig string }
 
 // Kind classifies the change. Conflict wins over rename over deletion over
 // addition; anything else is a modification.
@@ -139,10 +140,12 @@ func (r Repo) Statuses() ([]Status, error) {
 			continue
 		}
 		code, p := rec[:2], rec[3:]
-		statuses = append(statuses, Status{Path: p, Code: code})
+		st := Status{Path: p, Code: code}
 		if strings.ContainsAny(code, "RC") && i+1 < len(records) {
 			i++ // consume the following bare origin-path record
+			st.Orig = records[i]
 		}
+		statuses = append(statuses, st)
 	}
 	return statuses, nil
 }
@@ -351,6 +354,35 @@ func (r Repo) CheckoutRevision(rev string) error {
 func (r Repo) CreateBranch(name string) error {
 	_, err := r.run("checkout", "-b", name)
 	return err
+}
+
+// Revert undoes the change s reports: tracked files return to HEAD in the
+// index and the working tree. A file git doesn't hold at HEAD, which is
+// what an untracked, added or renamed-to path is, is only taken out of the
+// index and left on disk, for the caller to remove.
+func (r Repo) Revert(s Status) error {
+	restore := func(p string) error {
+		_, err := r.run("restore", "--source=HEAD", "--staged", "--worktree", "--", p)
+		return err
+	}
+	untrack := func(p string) error {
+		_, err := r.run("rm", "-f", "--cached", "--", p)
+		return err
+	}
+	switch s.Kind() {
+	case Untracked:
+		return nil
+	case Added:
+		return untrack(s.Path)
+	case Renamed:
+		if err := untrack(s.Path); err != nil {
+			return err
+		}
+		return restore(s.Orig)
+	case Conflict:
+		return fmt.Errorf("%s is in conflict", s.Path)
+	}
+	return restore(s.Path)
 }
 
 // Dirty reports whether tracked files have uncommitted changes.

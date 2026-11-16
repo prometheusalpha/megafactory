@@ -274,3 +274,54 @@ func TestDiffLayoutChoiceIsKept(t *testing.T) {
 		t.Error("choosing Split did not take back the unified choice")
 	}
 }
+
+// Reverting a modified file puts HEAD's text on disk and in its tab, over
+// unsaved edits, and closes its diff.
+func TestRevertChangeRestoresFileAndTab(t *testing.T) {
+	dir, rel, committed, working := diffRepo(t)
+	a, tb := diffApp(t, dir, rel, working)
+	tb.ed.Buffer.Reset("unsaved " + working)
+	a.openDiff(rel)
+	a.revertChange(git.Status{Path: rel, Code: " M"})
+	if got, _ := os.ReadFile(filepath.Join(dir, rel)); string(got) != committed {
+		t.Errorf("file = %q, want %q", got, committed)
+	}
+	if got := tb.ed.Buffer.String(); got != committed {
+		t.Errorf("tab = %q, want %q", got, committed)
+	}
+	for _, x := range a.tabs {
+		if x.diff != nil {
+			t.Error("the diff tab is still open")
+		}
+	}
+}
+
+// A file git doesn't hold goes to the Trash, and its tab closes.
+func TestRevertChangeTrashesUntracked(t *testing.T) {
+	dir, rel, _, working := diffRepo(t)
+	a, _ := diffApp(t, dir, rel, working)
+	if err := os.WriteFile(filepath.Join(dir, "fresh.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.tabs = append(a.tabs, &tab{path: "fresh.txt", name: "fresh.txt", ed: &editor.State{Buffer: editor.NewBuffer("x\n")}})
+	var trashed string
+	a.host.Trash = func(p string) error { trashed = p; return os.Remove(p) }
+	a.revertChange(git.Status{Path: "fresh.txt", Code: "??"})
+	if trashed != filepath.Join(a.project, "fresh.txt") {
+		t.Errorf("trashed %q", trashed)
+	}
+	if len(a.tabs) != 1 || a.tabs[0].path != rel {
+		t.Errorf("tabs = %d, want only %s left", len(a.tabs), rel)
+	}
+}
+
+// Cancel leaves everything as it was.
+func TestRevertChangeCancel(t *testing.T) {
+	dir, rel, _, working := diffRepo(t)
+	a, _ := diffApp(t, dir, rel, working)
+	a.host.Ask = func(Question, func(int)) {}
+	a.revertChange(git.Status{Path: rel, Code: " M"})
+	if got, _ := os.ReadFile(filepath.Join(dir, rel)); string(got) != working {
+		t.Errorf("file changed to %q", got)
+	}
+}

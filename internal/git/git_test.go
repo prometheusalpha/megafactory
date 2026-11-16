@@ -387,3 +387,90 @@ func TestRecentBranches(t *testing.T) {
 		t.Errorf("RecentBranches = %q, want %q", got, want)
 	}
 }
+
+func statusOf(t *testing.T, repo Repo, path string) Status {
+	t.Helper()
+	st, err := repo.Statuses()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range st {
+		if s.Path == path {
+			return s
+		}
+	}
+	t.Fatalf("%s has no status in %+v", path, st)
+	return Status{}
+}
+
+func TestRevertTracked(t *testing.T) {
+	dir, repo := newTestRepo(t)
+	gitCmd(t, dir, "add", "hello.txt") // staged too, as both are undone
+	if err := repo.Revert(statusOf(t, repo, "hello.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "hello.txt")); string(got) != "one\ntwo\nthree\nfour\n" {
+		t.Errorf("hello.txt = %q, want HEAD's", got)
+	}
+	for _, s := range mustStatuses(t, repo) {
+		if s.Path == "hello.txt" {
+			t.Errorf("hello.txt still changed: %+v", s)
+		}
+	}
+}
+
+func TestRevertDeleted(t *testing.T) {
+	dir, repo := newTestRepo(t)
+	gitCmd(t, dir, "rm", "-q", "-f", "hello.txt")
+	if err := repo.Revert(statusOf(t, repo, "hello.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "hello.txt")); err != nil {
+		t.Errorf("hello.txt not restored: %v", err)
+	}
+}
+
+func TestRevertUntrackAddedAndRenamed(t *testing.T) {
+	dir, repo := newTestRepo(t)
+	gitCmd(t, dir, "add", "new.txt")
+	if err := repo.Revert(statusOf(t, repo, "new.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if s := statusOf(t, repo, "new.txt"); s.Kind() != Untracked {
+		t.Errorf("new.txt after Revert = %+v, want untracked, left on disk for the caller", s)
+	}
+
+	gitCmd(t, dir, "mv", "hello.txt", "moved.txt")
+	s := statusOf(t, repo, "moved.txt")
+	if s.Orig != "hello.txt" {
+		t.Fatalf("Orig = %q, want hello.txt", s.Orig)
+	}
+	if err := repo.Revert(s); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "hello.txt")); err != nil {
+		t.Errorf("the old name is not back: %v", err)
+	}
+	if s := statusOf(t, repo, "moved.txt"); s.Kind() != Untracked {
+		t.Errorf("moved.txt = %+v, want untracked", s)
+	}
+}
+
+func TestRevertUntrackedAndConflict(t *testing.T) {
+	_, repo := newTestRepo(t)
+	if err := repo.Revert(Status{Path: "new.txt", Code: "??"}); err != nil {
+		t.Errorf("Revert(untracked) = %v, want nil", err)
+	}
+	if err := repo.Revert(Status{Path: "x", Code: "UU"}); err == nil {
+		t.Error("Revert(conflict) = nil, want an error")
+	}
+}
+
+func mustStatuses(t *testing.T, repo Repo) []Status {
+	t.Helper()
+	st, err := repo.Statuses()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
