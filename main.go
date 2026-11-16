@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"megafactory/internal/app"
+	"megafactory/internal/git"
 	"megafactory/internal/runner"
 
 	"github.com/egoist/mygo"
@@ -44,7 +45,7 @@ func main() {
 			BackgroundColor:      "light-dark(#e3e7ef, #1e2229)",
 			Content:              ui.View(a.View),
 		})
-		a.UseHost(windowHost(win))
+		a.UseHost(windowHost(win, a))
 		mygo.App.SetMenu(appMenu(a, win))
 		a.OnKeymapChange(func() { mygo.App.SetMenu(appMenu(a, win)) })
 		closing := false
@@ -53,6 +54,9 @@ func main() {
 				e.PreventDefault()
 			}
 		})
+		// Git changed in a terminal while the window was behind it, as
+		// VS Code and IntelliJ look again then.
+		win.OnFocus(func() { win.Update(a.GitChanged) })
 		win.OnClosed(func() {
 			a.Shutdown()
 			app.SaveState(a.State())
@@ -118,7 +122,7 @@ func appMenu(a *app.App, win *mygo.Window) *mygo.Menu {
 }
 
 // windowHost is the app's host as this window serves it.
-func windowHost(win *mygo.Window) app.Host {
+func windowHost(win *mygo.Window, a *app.App) app.Host {
 	return app.Host{
 		Run: func(job func() func()) {
 			go func() { win.Update(job()) }()
@@ -164,6 +168,7 @@ func windowHost(win *mygo.Window) app.Host {
 		Watch: func(root string, changed func([]string)) func() {
 			ctx, stop := context.WithCancel(context.Background())
 			go watchProject(ctx, win, root, changed)
+			go watchGit(ctx, win, root, a.GitChanged)
 			return stop
 		},
 		NewTerm: func(opts terminal.Options) (app.TermHandle, error) {
@@ -174,6 +179,37 @@ func windowHost(win *mygo.Window) app.Host {
 			return app.LiveTerm{T: t}, nil
 		},
 		StartProc: runner.Start,
+	}
+}
+
+// watchGit calls changed once the repository's refs move, as a commit or
+// a checkout in a terminal does. watchProject leaves .git out, so these
+// reach neither the tree nor the gutter otherwise.
+func watchGit(ctx context.Context, win *mygo.Window, root string, changed func()) {
+	dir, ok := git.GitDir(root)
+	if !ok {
+		return
+	}
+	w, err := mygo.WatchFiles(ctx, dir, mygo.FileWatchOptions{
+		Recursive: true,
+		HintsOnly: true,
+		Ignore:    func(p string, _ bool) bool { return git.WatchIgnored(p) },
+		// A commit writes several files; refresh once they settle.
+		Debounce: 200 * time.Millisecond,
+	})
+	if err != nil {
+		log.Printf("watch %s: %v", dir, err)
+		return
+	}
+	defer w.Close()
+	for {
+		if _, err := w.Next(ctx); err != nil {
+			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				log.Printf("watch %s: %v", dir, err)
+			}
+			return
+		}
+		win.Update(changed)
 	}
 }
 

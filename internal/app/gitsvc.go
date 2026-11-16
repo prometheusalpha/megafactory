@@ -95,6 +95,11 @@ func (a *App) gitRefresh() {
 	})
 }
 
+// GitChanged tells the app that git may have changed under it, as when a
+// commit is made in a terminal, so the changes, branch and gutter are read
+// again.
+func (a *App) GitChanged() { a.gitRefresh() }
+
 // gitHeadChanged drops blame kept for the old HEAD and reads it again,
 // with the diff base, for every open file.
 func (a *App) gitHeadChanged() {

@@ -4,6 +4,7 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -27,6 +28,9 @@ func Detect(dir string) (Repo, bool) {
 // run invokes git in r.Dir, keeping git's own error output in the error.
 func (r Repo) run(args ...string) ([]byte, error) {
 	cmd := exec.Command("git", append([]string{"-C", r.Dir}, args...)...)
+	// Read-only commands must not refresh the index: the lock and rewrite
+	// would show as a change of .git, which the app watches for commits.
+	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return out, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
