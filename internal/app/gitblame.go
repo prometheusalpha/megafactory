@@ -22,7 +22,7 @@ func blameLabel(bl git.BlameLine) string {
 	if bl.Boundary {
 		return "You · Uncommitted changes"
 	}
-	return fmt.Sprintf("%s, %s · %s", bl.Author, bl.Time.Format("02 Jan 2006"), clip(bl.Summary, 40))
+	return fmt.Sprintf("%s, %s · %s", bl.Author, bl.Time.Format("02 Jan 2006"), bl.Summary)
 }
 
 // blameCaretInlay is the inline blame of the caret's line, or nil when the
@@ -40,7 +40,7 @@ func (a *App) blameCaretInlay(t *tab) []editor.Inlay {
 	for _, bl := range bf.lines {
 		if bl.Line-1 == line {
 			snap := t.ed.Buffer.Snapshot()
-			return []editor.Inlay{{Offset: snap.LineEnd(line), Text: "  " + blameLabel(bl), Trailing: true}}
+			return []editor.Inlay{{Offset: snap.LineEnd(line), Text: "  " + blameLabel(bl), Trailing: true, Ellipsis: "…"}}
 		}
 	}
 	return nil
