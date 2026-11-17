@@ -168,14 +168,23 @@ func (a *App) newTerm() {
 		// Option is Meta, so Option+Backspace reaches the shell as Esc DEL.
 		OptionAsAlt: true,
 		OnKey: func(mods ui.Modifiers, key ui.Key) bool {
-			// The encoder sends Option+arrow as a CSI sequence that zsh and
-			// readline leave unbound, so send the Esc b / Esc f they bind to
-			// word motion, as Terminal.app does.
-			if mods != ui.Alt || tab.term == nil {
+			if tab.term == nil {
 				return false
 			}
 			live, ok := tab.term.(LiveTerm)
 			if !ok {
+				return false
+			}
+			// Cmd+Backspace clears the line before the cursor (Ctrl+U),
+			// as it does in Terminal.app.
+			if mods == ui.Cmd && key == ui.KeyBackspace {
+				live.T.Send([]byte("\x15"))
+				return true
+			}
+			// The encoder sends Option+arrow as a CSI sequence that zsh and
+			// readline leave unbound, so send the Esc b / Esc f they bind to
+			// word motion, as Terminal.app does.
+			if mods != ui.Alt {
 				return false
 			}
 			switch key {
