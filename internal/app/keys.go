@@ -19,6 +19,8 @@ func (a *App) keyActions(svc ui.Services) map[string]func() {
 		"recentProjects":     a.OpenRecentPalette,
 		"togglePanel":        func() { a.showBottom = !a.showBottom },
 		"goToImplementation": a.GoToImplementation,
+		"navigateBack":       a.NavigateBack,
+		"navigateForward":    a.NavigateForward,
 		"quickFix":           a.QuickFix,
 		"copyReference":      func() { a.copyReference(svc) },
 		// A new run hangs up the live one, so Run is Rerun as well.

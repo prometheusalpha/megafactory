@@ -183,6 +183,7 @@ type App struct {
 	// pendingLine is where a tab's editor puts the caret once it shows,
 	// as a problem's or a definition's open asks.
 	pendingLine *openLine
+	nav         navState
 }
 
 // newApp opens no project: main opens the one of st once the window is
@@ -719,6 +720,7 @@ func (a *App) openFile(n *node) {
 			}
 			if err != nil {
 				log.Printf("open %s: %v", n.path, err)
+				a.navOpenFailed(n.path)
 				return
 			}
 			// A second click may have opened it while the first read.
@@ -842,6 +844,7 @@ func (a *App) editorCard(c *ui.Context, k *colors) ui.Element {
 				cur.ed.GoTo(editor.Pos{Line: at.line, Col: at.col})
 			}
 		}
+		a.navFrame(cur)
 	})
 	return e
 }

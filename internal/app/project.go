@@ -29,6 +29,7 @@ func (a *App) OpenProject(dir string) {
 	a.builds = buildView{}
 	a.gitProjectOpened()
 	a.pendingLine = nil
+	a.nav = navState{}
 	a.root = &node{name: filepath.Base(dir), dir: true, open: true}
 	a.tabs = slices.DeleteFunc(a.tabs, func(t *tab) bool { return t.ed != nil || t.diff != nil })
 	a.active, a.selected, a.treeFocus, a.followed = 0, "", "", nil

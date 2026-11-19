@@ -108,6 +108,9 @@ func appMenu(a *app.App, win *mygo.Window) *mygo.Menu {
 		}},
 		{Role: mygo.RoleEditMenu},
 		{Label: "Go", Submenu: []*mygo.MenuItem{
+			item("Back", "navigateBack", a.NavigateBack),
+			item("Forward", "navigateForward", a.NavigateForward),
+			mygo.Separator(),
 			item("Go to File…", "findFile", a.OpenFilePalette),
 			item("Find in Files…", "findInFiles", a.OpenFindInFiles),
 			item("Go to Implementation", "goToImplementation", a.GoToImplementation),

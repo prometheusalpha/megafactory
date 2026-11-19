@@ -38,6 +38,10 @@ var Actions = []Action{
 	{"recentProjects", "Recent Projects", Binding{ui.Cmd | ui.Alt, ui.KeyR}},
 	{"togglePanel", "Toggle Bottom Panel", Binding{ui.Ctrl, ui.KeyBackquote}},
 	{"goToImplementation", "Go to Implementation", Binding{ui.Cmd | ui.Shift, ui.KeyI}},
+	// IntelliJ's macOS keys, which the editor's Indent and Outdent give up:
+	// Tab and Shift+Tab do those.
+	{"navigateBack", "Back", Binding{ui.Cmd, ui.KeyBracketLeft}},
+	{"navigateForward", "Forward", Binding{ui.Cmd, ui.KeyBracketRight}},
 	{"quickFix", "Quick Fix", Binding{ui.Alt, ui.KeyEnter}},
 	{"copyReference", "Copy Reference", Binding{ui.Ctrl | ui.Shift, ui.KeyC}},
 	{"run", "Run / Rerun", Binding{ui.Ctrl, ui.KeyR}},
