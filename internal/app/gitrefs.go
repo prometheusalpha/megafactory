@@ -2,6 +2,7 @@ package app
 
 import (
 	"strconv"
+	"time"
 
 	"megafactory/internal/git"
 
@@ -26,7 +27,12 @@ type branchPicker struct {
 	// toggled holds the folders and sections the user flipped away from
 	// their default (see openByDefault).
 	toggled map[string]bool
+	// copied is the full ref whose name was just copied; its button shows
+	// a check until copiedFor has passed.
+	copied string
 }
+
+const copiedFor = 1500 * time.Millisecond
 
 // checkoutPrompt remembers a checkout git refused, so the stash-and-retry
 // offer can run that very same checkout once the working tree is clean.
@@ -214,6 +220,29 @@ func (a *App) pickerRow(c *ui.Context, k *colors, p *branchPicker, i int, it pic
 		}
 		ui.Text(c, it.label).FontSize(13).TextColor(k.text).SingleLine()
 		ui.Spacer(c)
+		if it.kind == itemRef {
+			copied := p.copied == it.ref.Full
+			name, label := "copy", "Copy "+it.ref.LocalName()
+			if copied {
+				name, label = "check", "Copied"
+			}
+			cp := iconButton(c, k, name, label, 24, 14)
+			if !copied && i != p.sel && !row.Hovered() {
+				cp.Opacity(0)
+			}
+			svc := c.Services()
+			cp.OnClick(func() {
+				svc.WriteClipboard(it.ref.LocalName())
+				full := it.ref.Full
+				p.copied = full
+				// A later copy owns the check; this one's timer leaves it.
+				a.host.After(copiedFor, func() {
+					if p.copied == full {
+						p.copied = ""
+					}
+				})
+			})
+		}
 	})
 	row.OnClick(func() { a.pickerChoose(p, it) })
 }

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"megafactory/internal/git"
 
@@ -122,6 +123,45 @@ func TestBranchPickerListsAndFilters(t *testing.T) {
 	}
 	if !tt.HasText("Checkout revision") {
 		t.Error("no checkout-revision action for a typed query")
+	}
+}
+
+// The copy button on a row puts the branch name, without a remote's, on the
+// clipboard and
+// leaves the checkout alone, though it sits inside the row that checks out.
+func TestBranchPickerCopiesName(t *testing.T) {
+	dir := refsGitRepo(t)
+	a := refsTestApp(t, dir)
+	var reset func()
+	a.host.After = func(_ time.Duration, fn func()) { reset = fn }
+	a.openBranchPicker()
+	tt := ui.NewTester(a.View, 1280, 800)
+	a.git.picker.toggled = map[string]bool{"sec:local": true}
+	tt.Frame()
+	click(t, tt, "Copy feature")
+	if got := tt.Clipboard(); got != "feature" {
+		t.Errorf("clipboard = %q, want feature", got)
+	}
+	if head := strings.TrimSpace(refsRunGit(t, dir, "branch", "--show-current")); head != "main" {
+		t.Errorf("copying checked out %q", head)
+	}
+	if a.git.picker == nil {
+		t.Fatal("copying closed the picker")
+	}
+	tt.Frame()
+	if _, ok := tt.Find("Copied"); !ok {
+		t.Error("copied button shows no check")
+	}
+	reset()
+	tt.Frame()
+	if _, ok := tt.Find("Copied"); ok {
+		t.Error("check stays after its time")
+	}
+	a.git.picker.toggled["sec:remote:origin"] = true
+	tt.Frame()
+	click(t, tt, "Copy main")
+	if got := tt.Clipboard(); got != "main" {
+		t.Errorf("clipboard = %q, want main for origin/main", got)
 	}
 }
 

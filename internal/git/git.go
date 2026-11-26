@@ -98,6 +98,18 @@ type Ref struct {
 	Kind       RefKind
 }
 
+// LocalName is the branch name without a remote branch's remote, the name a
+// checkout tracks it under (origin/feature -> feature).
+func (r Ref) LocalName() string {
+	if r.Kind != RemoteBranch {
+		return r.Name
+	}
+	if i := strings.IndexByte(r.Name, '/'); i >= 0 {
+		return r.Name[i+1:]
+	}
+	return r.Name
+}
+
 // Branch is the current branch name, or a short hash on a detached HEAD.
 func (r Repo) Branch() (string, error) {
 	out, err := r.run("symbolic-ref", "--short", "-q", "HEAD")
@@ -331,10 +343,7 @@ func (r Repo) Checkout(ref Ref) error {
 		_, err := r.run("checkout", "--detach", ref.Name)
 		return err
 	case RemoteBranch:
-		local := ref.Name
-		if i := strings.IndexByte(local, '/'); i >= 0 {
-			local = local[i+1:]
-		}
+		local := ref.LocalName()
 		if _, err := r.run("checkout", local); err == nil {
 			return nil
 		}
