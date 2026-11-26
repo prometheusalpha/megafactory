@@ -831,10 +831,37 @@ func (a *App) setInlays(t *tab) {
 	}
 	snap := t.ed.Buffer.Snapshot()
 	ds := t.ed.Diagnostics()
-	inlays := make([]editor.Inlay, 0, len(ds))
+	// One inlay a line, its worst problem's, so that problems sharing a
+	// line (as Lombok's warnings, which jdtls sends twice) don't run on
+	// past the window; the rest are only counted, the Problems panel
+	// listing them in full.
+	type lineProblem struct {
+		d editor.Diagnostic
+		n int
+	}
+	var lines []int
+	worst := map[int]*lineProblem{}
 	for _, d := range ds {
 		line := lineAt(snap, d.Start)
-		inlays = append(inlays, editor.Inlay{Offset: snap.LineEnd(line), Text: " " + clip(firstLine(d.Message), 80), Trailing: true})
+		w, ok := worst[line]
+		if !ok {
+			lines = append(lines, line)
+			worst[line] = &lineProblem{d: d, n: 1}
+			continue
+		}
+		w.n++
+		if d.Severity < w.d.Severity {
+			w.d = d
+		}
+	}
+	inlays := make([]editor.Inlay, 0, len(lines))
+	for _, line := range lines {
+		w := worst[line]
+		text := clip(firstLine(w.d.Message), 80)
+		if w.n > 1 {
+			text += fmt.Sprintf(" (+%d)", w.n-1)
+		}
+		inlays = append(inlays, editor.Inlay{Offset: snap.LineEnd(line), Text: " " + text, Trailing: true})
 	}
 	j.inlays[t.path] = inlays
 	a.applyInlays(t)
