@@ -596,6 +596,26 @@ func TestInlineErrorsOnePerLine(t *testing.T) {
 	}
 }
 
+func TestInlineErrorsSkipTasks(t *testing.T) {
+	defer func() { prefs = defaultSettings }()
+	dir := sampleProject(t)
+	a, f, tt := openDemo(t, dir)
+	file := filepath.Join(dir, filepath.FromSlash(demoRel))
+	snap := a.tabs[a.active].ed.Buffer.Snapshot()
+	f.diag(file, snap.Version(), []javalang.Diagnostic{
+		{Start: snap.LineStart(4), End: snap.LineStart(4) + 1, Severity: 2, Message: "TODO fix this", Code: jdtTaskProblem},
+		{Start: snap.LineStart(5), End: snap.LineStart(5) + 1, Severity: 0, Message: "Cannot resolve"},
+	})
+	tt.Frame()
+	inlays := a.java.inlays[demoRel]
+	if len(inlays) != 1 || inlays[0].Text != " Cannot resolve" {
+		t.Errorf("inlays %+v, want the error alone, not the task", inlays)
+	}
+	if n := len(a.java.problems()); n != 2 {
+		t.Errorf("problems %d, want the task still listed", n)
+	}
+}
+
 func TestBuildPageTasks(t *testing.T) {
 	dir := sampleProject(t)
 	// A wrapper, so the command line is the project's own, not PATH's.

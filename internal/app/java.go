@@ -472,7 +472,7 @@ func (a *App) javaDiagnostics(file string, version uint64, ds []javalang.Diagnos
 		return
 	}
 	f := javaFile{version: version, ds: ds, rel: rel}
-	shown := false
+	var shown []*tab
 	for _, t := range a.tabs {
 		if t.ed == nil || !samePath(a.abs(t.path), file) {
 			continue
@@ -485,10 +485,9 @@ func (a *App) javaDiagnostics(file string, version uint64, ds []javalang.Diagnos
 		snap := t.ed.Buffer.Snapshot()
 		t.ed.SetDiagnostics(v, javaEditorDiagnostics(ds, versionClip(v, t)))
 		f.problems = javaProblems(rel, t.ed.Diagnostics(), snap)
-		shown = true
-		a.setInlays(t)
+		shown = append(shown, t)
 	}
-	if !shown {
+	if len(shown) == 0 {
 		// No tab shows it: place it in the text last sent, as the Problems
 		// panel and a tab opened after keep it.
 		last := j.sent[file]
@@ -498,6 +497,10 @@ func (a *App) javaDiagnostics(file string, version uint64, ds []javalang.Diagnos
 		delete(j.diagnostics, file)
 	} else {
 		j.diagnostics[file] = f
+	}
+	// After the store: setInlays reads the codes from it.
+	for _, t := range shown {
+		a.setInlays(t)
 	}
 }
 
@@ -817,6 +820,10 @@ func (a *App) noteBuildChanges(dirs []string) {
 
 // setInlays shows each problem's first line at the end of its line, when
 // the settings ask for it. The diagnostics are the editor's own, which
+// jdtTaskProblem is the code jdtls gives task markers (TODO, FIXME):
+// JDT's IProblem.Task.
+const jdtTaskProblem = "536871362"
+
 // SetDiagnostics moved through the edits since: they need no rebuild as
 // the text is typed, only as problems arrive or the setting changes.
 func (a *App) setInlays(t *tab) {
@@ -831,6 +838,16 @@ func (a *App) setInlays(t *tab) {
 	}
 	snap := t.ed.Buffer.Snapshot()
 	ds := t.ed.Diagnostics()
+	// A TODO's task marker only repeats the comment it sits on, and with the
+	// blame after it runs the line past the window; the Problems panel still
+	// lists it. The editor keeps no codes, so the server's are matched by
+	// message, as quickFixDiagnostics does.
+	tasks := map[string]bool{}
+	for _, d := range j.diagnostics[a.abs(t.path)].ds {
+		if d.Code == jdtTaskProblem {
+			tasks[d.Message] = true
+		}
+	}
 	// One inlay a line, its worst problem's, so that problems sharing a
 	// line (as Lombok's warnings, which jdtls sends twice) don't run on
 	// past the window; the rest are only counted, the Problems panel
@@ -842,6 +859,9 @@ func (a *App) setInlays(t *tab) {
 	var lines []int
 	worst := map[int]*lineProblem{}
 	for _, d := range ds {
+		if tasks[d.Message] {
+			continue
+		}
 		line := lineAt(snap, d.Start)
 		w, ok := worst[line]
 		if !ok {
